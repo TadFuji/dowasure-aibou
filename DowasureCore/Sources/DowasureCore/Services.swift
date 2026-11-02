@@ -1,0 +1,71 @@
+import Foundation
+
+/// Turns a day's conversation into a structured record (F3).
+public struct Recorder: Sendable {
+    let client: ClaudeClient
+
+    public init(client: ClaudeClient) { self.client = client }
+
+    public func extract(transcript: String) async throws -> Extraction {
+        let (extraction, _) = try await client.structured(
+            Extraction.self, model: .haiku,
+            system: Prompts.extractionSystem,
+            user: transcript,
+            schema: Prompts.extractionSchema)
+        return extraction
+    }
+}
+
+/// Answers a "what was it again?" question from the user's own records (F4).
+public struct Answerer: Sendable {
+    let client: ClaudeClient
+    public var retriever: Retriever
+
+    public init(client: ClaudeClient, retriever: Retriever = Retriever()) {
+        self.client = client
+        self.retriever = retriever
+    }
+
+    public func answer(_ question: String, records: [DayRecord], today: Date = Date()) async throws -> VerifiedAnswer {
+        let candidates = retriever.candidates(for: question, in: records, today: today)
+        let dc = retriever.dayCalendar
+        guard !candidates.isEmpty else {
+            return Self.verify(ModelAnswer(found: false, answer: "", evidenceDates: [], confidence: .low,
+                                           followupQuestion: "いつ頃のことか、覚えていますか？"),
+                               candidates: [], dayCalendar: dc)
+        }
+        let user = """
+        今日は \(dc.key(for: today)) です。
+
+        \(Prompts.renderRecords(candidates))
+
+        質問: \(question)
+        """
+        let (raw, _) = try await client.structured(
+            ModelAnswer.self, model: .haiku,
+            system: Prompts.answerSystem,
+            user: user,
+            schema: Prompts.answerSchema)
+        return Self.verify(raw, candidates: candidates, dayCalendar: dc)
+    }
+
+    /// Keeps only evidence dates that belong to records actually sent to the model,
+    /// and composes the date part of the reply in code (not by the model).
+    public static func verify(_ raw: ModelAnswer, candidates: [DayRecord], dayCalendar: DayCalendar) -> VerifiedAnswer {
+        let allowed = Set(candidates.map(\.date))
+        let evidence = Array(Set(raw.evidenceDates.filter { allowed.contains($0) })).sorted()
+        let followup = raw.followupQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let answer = raw.answer.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if raw.found && !evidence.isEmpty && !answer.isEmpty {
+            let labels = evidence.map(dayCalendar.spokenLabel(for:)).joined(separator: "と")
+            var text = "\(labels)の記録より：\(answer)"
+            if !followup.isEmpty { text += "\n\(followup)" }
+            return VerifiedAnswer(kind: .found(evidenceDates: evidence), answer: answer,
+                                  confidence: raw.confidence, followupQuestion: followup, displayText: text)
+        }
+        let question = followup.isEmpty ? "いつ頃のことか、覚えていますか？" : followup
+        return VerifiedAnswer(kind: .notFound, answer: "", confidence: .low, followupQuestion: question,
+                              displayText: "記録には見当たりません。\n\(question)")
+    }
+}

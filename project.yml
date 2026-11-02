@@ -1,0 +1,53 @@
+name: DowasureAibou
+options:
+  bundleIdPrefix: io.github.tadfuji
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  DowasureCore:
+    path: DowasureCore
+targets:
+  DowasureAibou:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: DowasureCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.tadfuji.dowasure
+        PRODUCT_NAME: ど忘れ相棒
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: ど忘れ相棒
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: あなたの声を文字にするために、マイクを使います。
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: あなたの声を、iPhoneの中で文字にします。
+        CODE_SIGN_STYLE: Automatic
+  DowasureAibouUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: DowasureAibou
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        TEST_TARGET_NAME: DowasureAibou
+schemes:
+  DowasureAibou:
+    build:
+      targets:
+        DowasureAibou: all
+        DowasureAibouUITests: [test]
+    test:
+      targets:
+        - DowasureAibouUITests
+      environmentVariables:
+        DOWASURE_LIVE_TEST: $(DOWASURE_LIVE_TEST)

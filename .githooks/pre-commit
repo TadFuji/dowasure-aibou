@@ -1,0 +1,12 @@
+#!/bin/sh
+# Block commits that contain something that looks like an Anthropic API key.
+if git diff --cached -U0 | grep -E '^\+' | grep -E 'sk-ant-[A-Za-z0-9_-]{10,}' >/dev/null; then
+  echo "pre-commit: staged changes contain an API key (sk-ant-...). Commit aborted." >&2
+  exit 1
+fi
+# Block files under private-data/ even if force-added.
+if git diff --cached --name-only | grep -E '^(private-data|secrets)/' >/dev/null; then
+  echo "pre-commit: private-data/ or secrets/ must not be committed." >&2
+  exit 1
+fi
+exit 0
