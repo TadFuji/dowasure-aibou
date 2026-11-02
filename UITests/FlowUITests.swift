@@ -25,6 +25,20 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["APIキーが設定されていません。設定画面で入力してください。"].waitForExistence(timeout: 10))
     }
 
+    /// Saving the key shows a confirmation right under the button.
+    func testSavingKeyShowsConfirmation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest-reset"]
+        app.launch()
+        app.buttons["settingsButton"].tap()
+        let field = app.secureTextFields["apiKeyField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("dummy-key-for-ui-test")
+        app.buttons["saveKeyButton"].tap()
+        XCTAssertTrue(app.staticTexts["保存しました。"].waitForExistence(timeout: 5))
+    }
+
     /// Recording today's events with the real API, then asking about them.
     func testTalkThenAskWithKey() throws {
         let key = try liveKey()

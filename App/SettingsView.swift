@@ -5,6 +5,7 @@ import DowasureCore
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @State private var apiKey = APIKeyStore.load()
+    @State private var keyMessage: String?
     @State private var message: String?
     @State private var confirmDelete = false
     @AppStorage("speechSpeed") private var speechSpeed = "slow"
@@ -24,7 +25,13 @@ struct SettingsView: View {
                     .textContentType(.password)
                     .accessibilityIdentifier("apiKeyField")
                 Button("保存する") {
-                    message = APIKeyStore.save(apiKey) ? "保存しました。" : "保存できませんでした。"
+                    keyMessage = APIKeyStore.save(apiKey) ? "保存しました。" : "保存できませんでした。"
+                }
+                .accessibilityIdentifier("saveKeyButton")
+                if let keyMessage {
+                    Label(keyMessage, systemImage: keyMessage == "保存しました。" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(keyMessage == "保存しました。" ? .green : .red)
+                        .accessibilityIdentifier("keyMessage")
                 }
                 Text("キーはこのiPhoneのキーチェーンにだけ保存されます。")
                     .font(.footnote).foregroundStyle(.secondary)
@@ -33,9 +40,9 @@ struct SettingsView: View {
                 Button("架空の記録を入れる") { loadSamples() }
                     .accessibilityIdentifier("loadSamples")
                 Button("すべての記録を消す", role: .destructive) { confirmDelete = true }
-            }
-            if let message {
-                Section { Text(message).accessibilityIdentifier("settingsMessage") }
+                if let message {
+                    Text(message).accessibilityIdentifier("settingsMessage")
+                }
             }
         }
         .font(.title3)
