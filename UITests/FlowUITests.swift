@@ -25,11 +25,18 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["APIキーが設定されていません。設定画面で入力してください。"].waitForExistence(timeout: 10))
     }
 
-    /// Full flow against the real API. Runs only when DOWASURE_LIVE_TEST=1 and a key is saved in the simulator.
+    /// Full flow against the real API. Runs only when the local secrets file exists
+    /// (secrets/ is git-ignored; the simulator can read the Mac's file system).
     func testAskWithKeyAnswersWithDate() throws {
-        try XCTSkipUnless(ProcessInfo.processInfo.environment["DOWASURE_LIVE_TEST"] == "1", "live API test is off")
+        let keyFile = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("secrets/anthropic_api_key")
+        let key = (try? String(contentsOf: keyFile, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        try XCTSkipIf(key.isEmpty, "no local API key; live test skipped")
         let app = XCUIApplication()
         app.launchArguments = ["-uitest-reset-records"]
+        app.launchEnvironment["DOWASURE_UITEST_API_KEY"] = key
         app.launch()
 
         app.buttons["settingsButton"].tap()

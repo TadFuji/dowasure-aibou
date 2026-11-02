@@ -29,7 +29,7 @@ cd "/Volumes/ROCKET_XTRM/coding/Built with Claude/DowasureCore" && swift test
 cd "/Volumes/ROCKET_XTRM/coding/Built with Claude" && xcodegen generate && xcodebuild test -project DowasureAibou.xcodeproj -scheme DowasureAibou -destination 'platform=iOS Simulator,name=Dowasure-iPhone' -derivedDataPath build/dd
 ```
 
-- 実 API を使う画面テストは `DOWASURE_LIVE_TEST=1` を付け、シミュレーターのアプリにキーが保存されているときだけ動く。
+- 実 API を使う画面テスト（testAskWithKeyAnswersWithDate）は `secrets/anthropic_api_key` があるときだけ動く。キーは起動時の環境変数でアプリ（DEBUG ビルドのみ）に渡り、キーチェーンに保存される。
 - シミュレーターは専用の `Dowasure-iPhone`（iOS 26.5）を使う。
 
 ## 既知の問題

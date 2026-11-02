@@ -16,6 +16,12 @@ struct DowasureApp: App {
         if args.contains("-uitest-reset") {
             APIKeyStore.save("")
         }
+        #if DEBUG
+        // Live UI tests hand the key over from the developer's local secrets file.
+        if let key = ProcessInfo.processInfo.environment["DOWASURE_UITEST_API_KEY"], !key.isEmpty {
+            APIKeyStore.save(key)
+        }
+        #endif
     }
 
     var body: some Scene {

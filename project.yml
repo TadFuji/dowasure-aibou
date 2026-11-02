@@ -49,5 +49,3 @@ schemes:
     test:
       targets:
         - DowasureAibouUITests
-      environmentVariables:
-        DOWASURE_LIVE_TEST: $(DOWASURE_LIVE_TEST)
