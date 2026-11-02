@@ -19,7 +19,8 @@
 - `App/`（SwiftUI。SwiftData の `StoredDay` に DayRecord を JSON で保存。API キーはキーチェーン）
 - `App/Voice.swift`: 音声認識（Speech、ja-JP、端末内が使えれば端末内）と読み上げ（AVSpeechSynthesizer）。Speech/TCC/音声タップのコールバックは別スレッドで来るので、必ず `nonisolated` の関数の中で登録する（MainActor 扱いになると `dispatch_assert_queue` で落ちる。2026-11-02 に実際に落ちた）。
 - `DowasureCore/Sources/DowasureEval` と `Fixtures/`: 採点テスト。`swift run DowasureEval`（検索だけ、通信なし）、`swift run DowasureEval --live`（実 API。キーは `secrets/anthropic_api_key`）。結果は `eval-results/latest.json`（コミットしない）。
-- `UITests/`: 画面の通しテスト。起動引数 `-uitest-reset`（記録とキーを消す）、`-uitest-reset-records`（記録だけ消す）。
+- `App/EveningReminder.swift`: 毎晩の通知（UNCalendarNotificationTrigger、既定20:00）。通知をタップすると AppRouter 経由で聞き取り画面を開く。
+- `UITests/`: 画面の通しテスト。起動引数 `-uitest-no-voice` で読み上げとマイクを止める。起動引数 `-uitest-reset`（記録とキーを消す）、`-uitest-reset-records`（記録だけ消す）。
 - `project.yml` から xcodegen で `.xcodeproj` を生成する（`.xcodeproj` はコミットしない）。
 
 ## 起動とテスト
@@ -33,6 +34,8 @@ cd "/Volumes/ROCKET_XTRM/coding/Built with Claude" && xcodegen generate && xcode
 - シミュレーターは専用の `Dowasure-iPhone`（iOS 26.5）を使う。
 
 ## 既知の問題
+
+- iOS 26.5 シミュレーターでは通知の許可要求が usernotificationsd に拒否される（UNErrorDomain 1、requestAuthorization not allowed）。お知らせの実際の動作は実機で確認する。
 
 - シミュレーターでは端末内音声認識の初期化に失敗する（kLSRErrorDomain Code=300）。声の確認は実機で行う。失敗時は画面に「うまく聞き取れませんでした」と出る。
 - 採点テストの架空データは Claude が作ったもので30問と小さい。検索の改善（漢字1文字の一致、2026-11-03）はこのデータで効果を確かめたため、過剰に合わせ込んでいる可能性がある。藤川さんの実データで確かめ直す。

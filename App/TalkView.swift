@@ -35,9 +35,9 @@ struct TalkView: View {
 
                 switch phase {
                 case .thinking:
-                    ProgressView("考えています…").font(.title3)
+                    ProgressView("考えています…").font(.title2)
                 case .saving:
-                    ProgressView("まとめています…").font(.title3)
+                    ProgressView("まとめています…").font(.title2)
                 case .finished:
                     if let saved { SavedSummary(extraction: saved) }
                 default:
@@ -45,20 +45,25 @@ struct TalkView: View {
                 }
 
                 if let errorMessage {
-                    Text(errorMessage).font(.title3).foregroundStyle(.red)
+                    Text(errorMessage).font(.title2).foregroundStyle(.red)
                 }
 
                 if !turns.isEmpty && phase != .finished && phase != .saving {
-                    Button("今日はここまでにする") {
+                    Button {
                         Task { await finish(say: Interviewer.closing) }
+                    } label: {
+                        Text("今日はここまでにする")
+                            .font(.title2.bold())
+                            .frame(maxWidth: .infinity, minHeight: 64)
                     }
-                    .font(.title3)
+                    .buttonStyle(.bordered)
+                    .tint(.indigo)
                     .accessibilityIdentifier("endButton")
                 }
             }
             .padding(24)
         }
-        .navigationTitle("今日のこと")
+        .elderScreen("今日のこと")
         .task {
             guard !started else { return }
             started = true
@@ -79,7 +84,7 @@ struct TalkView: View {
         }
         HStack {
             TextField("文字で答える", text: $typed, axis: .vertical)
-                .font(.title3)
+                .font(.title2)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("answerInput")
             Button("送る") {
@@ -87,7 +92,7 @@ struct TalkView: View {
                 typed = ""
                 Task { await handleAnswer(text) }
             }
-            .font(.title3.bold())
+            .font(.title2.bold())
             .disabled(typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityIdentifier("sendAnswer")
         }
@@ -162,15 +167,15 @@ struct SavedSummary: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("記録しました").font(.title2.bold())
-            Text(extraction.summary).font(.title3)
+            Text(extraction.summary).font(.title2)
             if !extraction.people.isEmpty {
-                Text("会った人：" + extraction.people.map(\.name).joined(separator: "、")).font(.title3)
+                Text("会った人：" + extraction.people.map(\.name).joined(separator: "、")).font(.title2)
             }
             if !extraction.promises.isEmpty {
-                Text("約束：" + extraction.promises.map { [$0.what, $0.due].filter { !$0.isEmpty }.joined(separator: "（") + ($0.due.isEmpty ? "" : "）") }.joined(separator: "、")).font(.title3)
+                Text("約束：" + extraction.promises.map { [$0.what, $0.due].filter { !$0.isEmpty }.joined(separator: "（") + ($0.due.isEmpty ? "" : "）") }.joined(separator: "、")).font(.title2)
             }
             if !extraction.places.isEmpty {
-                Text("場所：" + extraction.places.map(\.name).joined(separator: "、")).font(.title3)
+                Text("場所：" + extraction.places.map(\.name).joined(separator: "、")).font(.title2)
             }
         }
         .padding()

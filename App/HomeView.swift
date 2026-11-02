@@ -21,11 +21,18 @@ struct HomeView: View {
                 .accessibilityIdentifier("talkButton")
                 Spacer()
                 Text("このアプリは暮らしの助けです。医療や診断は行いません。")
-                    .font(.footnote)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button("設定") { path.append(.settings) }
-                    .font(.title3)
+                Button {
+                    path.append(.settings)
+                } label: {
+                    Label("設定", systemImage: "gearshape.fill")
+                        .font(.title2.bold())
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                }
+                .buttonStyle(.bordered)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
                     .accessibilityIdentifier("settingsButton")
             }
             .padding(24)
@@ -38,5 +45,12 @@ struct HomeView: View {
                 }
             }
         }
+        .onChange(of: router.openTalk, initial: true) { _, open in
+            guard open else { return }
+            router.openTalk = false
+            path = [.talk]
+        }
     }
+
+    private var router: AppRouter { AppRouter.shared }
 }

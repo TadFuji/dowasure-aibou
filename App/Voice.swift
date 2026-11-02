@@ -1,9 +1,10 @@
 import AVFoundation
+import DowasureCore
 import Speech
 import SwiftUI
 
 /// Turns the user's voice into text with Apple's speech recognizer (on-device when available).
-/// Stops by itself after a few seconds of silence.
+/// Stops by itself after silence (long wait before the first words, short pause after speaking).
 @MainActor
 @Observable
 final class VoiceInput {
@@ -14,7 +15,6 @@ final class VoiceInput {
 
     private(set) var state: State = .idle
     private(set) var text = ""
-    var silenceTimeout: TimeInterval = 3
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ja-JP"))
     private let engine = AVAudioEngine()
@@ -105,8 +105,21 @@ final class VoiceInput {
 
     private func resetSilenceTimer() {
         silenceTimer?.invalidate()
-        silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceTimeout, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.stop() }
+        let timeout = VoiceTiming.silenceTimeout(heardSomething: !text.isEmpty)
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.timedOut() }
+        }
+    }
+
+    /// Silence timer fired: finish the answer, or explain why the microphone stopped.
+    private func timedOut() {
+        guard state == .listening else { return }
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            cleanUp()
+            onFinish = nil
+            state = .failed("お話が聞こえなかったので、いったん止めました。もう一度「声で話す」を押してください。")
+        } else {
+            stop()
         }
     }
 
@@ -157,12 +170,32 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
     /// "slow" or "normal", chosen in settings (key "speechSpeed").
     var speed: String { UserDefaults.standard.string(forKey: "speechSpeed") ?? "slow" }
 
+    static let voiceKey = "voiceIdentifier"
+
+    /// Japanese voices installed on this iPhone, most natural first (premium, enhanced, then default).
+    static var japaneseVoices: [AVSpeechSynthesisVoice] {
+        AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language == "ja-JP" }
+            .sorted { $0.quality.rawValue != $1.quality.rawValue ? $0.quality.rawValue > $1.quality.rawValue : $0.name < $1.name }
+    }
+
+    /// The voice chosen in settings, or the most natural installed one.
+    var voice: AVSpeechSynthesisVoice? {
+        if let id = UserDefaults.standard.string(forKey: Self.voiceKey),
+           let chosen = AVSpeechSynthesisVoice(identifier: id) {
+            return chosen
+        }
+        return Self.japaneseVoices.first ?? AVSpeechSynthesisVoice(language: "ja-JP")
+    }
+
     func say(_ text: String) {
         stop()
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "ja-JP")
-        utterance.rate = speed == "slow" ? AVSpeechUtteranceDefaultSpeechRate * 0.8 : AVSpeechUtteranceDefaultSpeechRate
+        utterance.voice = voice
+        // A slight slowdown keeps the voice natural; slowing more makes it sound mechanical.
+        utterance.rate = speed == "slow" ? AVSpeechUtteranceDefaultSpeechRate * 0.9 : AVSpeechUtteranceDefaultSpeechRate
+        utterance.postUtteranceDelay = 0.2
         synthesizer.speak(utterance)
     }
 
@@ -218,11 +251,11 @@ struct MicButton: View {
 
         if voice.isListening {
             Text(voice.text.isEmpty ? "どうぞ、お話しください…" : voice.text)
-                .font(.title3)
+                .font(.title2)
                 .foregroundStyle(.secondary)
         }
         if case .failed(let message) = voice.state {
-            Text(message).font(.title3).foregroundStyle(.red)
+            Text(message).font(.title2).foregroundStyle(.red)
         }
     }
 }

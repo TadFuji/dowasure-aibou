@@ -8,13 +8,8 @@ final class FlowUITests: XCTestCase {
     /// Without an API key, asking a question shows a clear message instead of crashing.
     func testAskWithoutKeyShowsGuidance() {
         let app = XCUIApplication()
-        app.launchArguments = ["-uitest-reset", "-uitest-no-voice"]
+        app.launchArguments = ["-uitest-reset", "-uitest-no-voice", "-uitest-load-samples"]
         app.launch()
-
-        app.buttons["settingsButton"].tap()
-        app.buttons["loadSamples"].tap()
-        XCTAssertTrue(app.staticTexts["架空の記録を入れました。"].waitForExistence(timeout: 5))
-        app.navigationBars.buttons.element(boundBy: 0).tap()
 
         app.buttons["askButton"].tap()
         let input = app.textFields["askInput"]
@@ -25,18 +20,43 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["APIキーが設定されていません。設定画面で入力してください。"].waitForExistence(timeout: 10))
     }
 
+    /// Turning on the evening reminder asks for permission and confirms the time.
+    func testEnablingReminderSchedulesIt() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest-reset", "-uitest-no-voice"]
+        app.launch()
+        app.buttons["settingsButton"].tap()
+        let toggle = app.switches["reminderToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        if (toggle.value as? String) == "1" { toggle.switches.firstMatch.tap() }
+        toggle.switches.firstMatch.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.buttons["許可"]
+        if allow.waitForExistence(timeout: 5) { allow.tap() }
+        let message = app.staticTexts["reminderMessage"]
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        // On the iOS 26.5 simulator, usernotificationsd refuses authorization ("requestAuthorization
+        // not allowed"), so the app must at least explain it. On a real iPhone it schedules.
+        XCTAssertTrue(message.label.contains("にお知らせします") || message.label.contains("通知が許可されていません"), message.label)
+    }
+
     /// Saving the key shows a confirmation right under the button.
     func testSavingKeyShowsConfirmation() {
         let app = XCUIApplication()
         app.launchArguments = ["-uitest-reset"]
         app.launch()
         app.buttons["settingsButton"].tap()
-        let field = app.secureTextFields["apiKeyField"]
+        let field = app.secureTextFields.firstMatch
+        scrollTo(field, in: app)
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
         field.typeText("dummy-key-for-ui-test")
-        app.buttons["saveKeyButton"].tap()
-        XCTAssertTrue(app.staticTexts["保存しました。"].waitForExistence(timeout: 5))
+        let save = app.buttons["APIキーを保存する"]
+        scrollTo(save, in: app)
+        save.tap()
+        let saved = app.staticTexts["保存しました。"]
+        scrollTo(saved, in: app)
+        XCTAssertTrue(saved.waitForExistence(timeout: 5))
     }
 
     /// Evening conversation with the real API (typed answers), then asking about it.
@@ -64,7 +84,7 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["savedSummary"].firstMatch.waitForExistence(timeout: 60)
                       || app.staticTexts["記録しました"].waitForExistence(timeout: 1))
 
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["homeButton"].tap()
         app.buttons["askButton"].tap()
         let ask = app.textFields["askInput"]
         ask.tap()
@@ -74,6 +94,15 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(answer.waitForExistence(timeout: 60))
         XCTAssertTrue(answer.label.contains("の記録より："), answer.label)
         XCTAssertTrue(answer.label.contains("青山"), answer.label)
+    }
+
+    /// Scrolls the current screen until the element exists (Form rows load lazily).
+    private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
+        var tries = 0
+        while !(element.exists && element.isHittable) && tries < 8 {
+            app.swipeUp()
+            tries += 1
+        }
     }
 
     private func liveKey() throws -> String {
@@ -96,13 +125,10 @@ final class FlowUITests: XCTestCase {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         try XCTSkipIf(key.isEmpty, "no local API key; live test skipped")
         let app = XCUIApplication()
-        app.launchArguments = ["-uitest-reset-records"]
+        app.launchArguments = ["-uitest-reset-records", "-uitest-no-voice", "-uitest-load-samples"]
         app.launchEnvironment["DOWASURE_UITEST_API_KEY"] = key
         app.launch()
 
-        app.buttons["settingsButton"].tap()
-        app.buttons["loadSamples"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["askButton"].tap()
         let input = app.textFields["askInput"]
         input.tap()

@@ -1,8 +1,10 @@
 import SwiftUI
 import SwiftData
+import DowasureCore
 
 @main
 struct DowasureApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     let container: ModelContainer
 
     init() {
@@ -15,6 +17,11 @@ struct DowasureApp: App {
         }
         if args.contains("-uitest-reset") {
             APIKeyStore.save("")
+        }
+        if args.contains("-uitest-load-samples") {
+            for record in SampleData.records(today: Date()) {
+                try? RecordStore.save(record, in: container.mainContext)
+            }
         }
         #if DEBUG
         // Live UI tests hand the key over from the developer's local secrets file.
@@ -35,6 +42,7 @@ struct DowasureApp: App {
 /// Shared look: large text and large buttons for older users.
 enum Style {
     static let bigButtonHeight: CGFloat = 120
+    static let homeButtonHeight: CGFloat = 80
 }
 
 struct BigButton: View {
@@ -53,4 +61,44 @@ struct BigButton: View {
         .tint(color)
         .clipShape(RoundedRectangle(cornerRadius: 24))
     }
+}
+
+/// Every screen other than home: large title at the top, and a large "back to home" button
+/// at the bottom instead of the small arrow in the corner.
+struct ElderScreen: ViewModifier {
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        VStack(spacing: 0) {
+            Text(title)
+                .font(.largeTitle.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+            content
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                Speaker.shared.stop()
+                dismiss()
+            } label: {
+                Label("ホームにもどる", systemImage: "house.fill")
+                    .font(.title.bold())
+                    .frame(maxWidth: .infinity, minHeight: Style.homeButtonHeight)
+            }
+            .buttonStyle(.bordered)
+            .tint(.primary)
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .padding(.horizontal, 24)
+            .padding(.bottom, 8)
+            .background(.background)
+            .accessibilityIdentifier("homeButton")
+        }
+    }
+}
+
+extension View {
+    func elderScreen(_ title: String) -> some View { modifier(ElderScreen(title: title)) }
 }

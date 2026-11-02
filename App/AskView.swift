@@ -15,13 +15,13 @@ struct AskView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("何を思い出したいですか？")
-                    .font(.title2.bold())
+                    .font(.title.bold())
                 MicButton(voice: voice) { spoken in
                     question = spoken
                     Task { await ask() }
                 }
-                TextField("例：先週、駅前で会った眼鏡の人の名前", text: $question, axis: .vertical)
-                    .font(.title3)
+                TextField("文字で聞く（例：先週会った眼鏡の人の名前）", text: $question, axis: .vertical)
+                    .font(.title2)
                     .lineLimit(2...4)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("askInput")
@@ -32,11 +32,11 @@ struct AskView: View {
                 .accessibilityIdentifier("askSubmit")
 
                 if let errorMessage {
-                    Text(errorMessage).font(.title3).foregroundStyle(.red)
+                    Text(errorMessage).font(.title2).foregroundStyle(.red)
                 }
                 if let result {
                     Text(result.displayText)
-                        .font(.title2)
+                        .font(.title.bold())
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
@@ -45,7 +45,7 @@ struct AskView: View {
             }
             .padding(24)
         }
-        .navigationTitle("あれ、何だっけ？")
+        .elderScreen("あれ、何だっけ？")
     }
 
     private func ask() async {

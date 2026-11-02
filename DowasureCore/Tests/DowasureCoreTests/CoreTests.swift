@@ -204,3 +204,10 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         #expect(t == "聞き手: 誰かと会いましたか？\n本人: 妻と散歩しました")
     }
 }
+
+@Suite struct VoiceTimingTests {
+    @Test func waitsLongerBeforeFirstWords() {
+        #expect(VoiceTiming.silenceTimeout(heardSomething: false) >= 15)
+        #expect(VoiceTiming.silenceTimeout(heardSomething: true) < VoiceTiming.silenceTimeout(heardSomething: false))
+    }
+}
