@@ -8,7 +8,7 @@ final class FlowUITests: XCTestCase {
     /// Without an API key, asking a question shows a clear message instead of crashing.
     func testAskWithoutKeyShowsGuidance() {
         let app = XCUIApplication()
-        app.launchArguments = ["-uitest-reset"]
+        app.launchArguments = ["-uitest-reset", "-uitest-no-voice"]
         app.launch()
 
         app.buttons["settingsButton"].tap()
@@ -39,23 +39,30 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["保存しました。"].waitForExistence(timeout: 5))
     }
 
-    /// Recording today's events with the real API, then asking about them.
+    /// Evening conversation with the real API (typed answers), then asking about it.
     func testTalkThenAskWithKey() throws {
         let key = try liveKey()
         let app = XCUIApplication()
-        app.launchArguments = ["-uitest-reset-records"]
+        app.launchArguments = ["-uitest-reset-records", "-uitest-no-voice"]
         app.launchEnvironment["DOWASURE_UITEST_API_KEY"] = key
         app.launch()
 
         app.buttons["talkButton"].tap()
-        let input = app.textViews["talkInput"]
+        XCTAssertTrue(app.staticTexts["今日は、どなたかと会ったり、話したりしましたか？"].waitForExistence(timeout: 5))
+        let input = app.textFields["answerInput"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
         input.tap()
-        input.typeText("今日は午後に図書館へ行って、司書の青山さんと話しました。来週の金曜日に本を返す約束をしました。")
-        app.buttons["saveButton"].tap()
-        let summary = app.otherElements["savedSummary"].firstMatch
-        let anyText = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "青山")).firstMatch
-        XCTAssertTrue(anyText.waitForExistence(timeout: 60) || summary.exists)
+        input.typeText("午後に図書館へ行って、司書の青山さんと話しました")
+        app.buttons["sendAnswer"].tap()
+
+        // The AI asks a follow-up question; the first question is replaced.
+        let firstGone = NSPredicate(format: "label != %@", "今日は、どなたかと会ったり、話したりしましたか？")
+        let changed = XCTNSPredicateExpectation(predicate: firstGone, object: app.staticTexts["aiQuestion"])
+        XCTAssertEqual(XCTWaiter().wait(for: [changed], timeout: 60), .completed)
+
+        app.buttons["endButton"].tap()
+        XCTAssertTrue(app.otherElements["savedSummary"].firstMatch.waitForExistence(timeout: 60)
+                      || app.staticTexts["記録しました"].waitForExistence(timeout: 1))
 
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["askButton"].tap()

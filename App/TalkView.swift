@@ -2,64 +2,156 @@ import SwiftUI
 import SwiftData
 import DowasureCore
 
-/// Records today's events. Text input for now; voice comes next.
+/// Evening conversation: the AI asks one question at a time by voice, the user answers by voice
+/// (or by typing), and at the end the conversation is summarized and saved as today's record.
 struct TalkView: View {
+    enum Phase: Equatable {
+        case speaking, listening, thinking, saving, finished
+    }
+
     @Environment(\.modelContext) private var context
-    @State private var text = ""
-    @State private var isWorking = false
+    @State private var turns: [InterviewTurn] = []
+    @State private var phase: Phase = .speaking
+    @State private var typed = ""
     @State private var saved: Extraction?
     @State private var errorMessage: String?
     @State private var voice = VoiceInput()
+    @State private var started = false
+
+    /// UI tests run without speech output or microphone.
+    private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
+
+    private var currentQuestion: String {
+        turns.last(where: { $0.speaker == .ai })?.text ?? Interviewer.firstQuestion
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("今日は、どなたかと会ったり、話したりしましたか？")
-                    .font(.title2.bold())
-                MicButton(voice: voice) { spoken in
-                    text = text.isEmpty ? spoken : text + "\n" + spoken
+                Text(currentQuestion)
+                    .font(.title.bold())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("aiQuestion")
+
+                switch phase {
+                case .thinking:
+                    ProgressView("考えています…").font(.title3)
+                case .saving:
+                    ProgressView("まとめています…").font(.title3)
+                case .finished:
+                    if let saved { SavedSummary(extraction: saved) }
+                default:
+                    answerControls
                 }
-                TextEditor(text: $text)
-                    .font(.title3)
-                    .frame(minHeight: 200)
-                    .padding(8)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(.secondary))
-                    .accessibilityIdentifier("talkInput")
-                BigButton(title: isWorking ? "まとめています…" : "記録する", systemImage: "square.and.arrow.down", color: .indigo) {
-                    Task { await save() }
-                }
-                .disabled(isWorking || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("saveButton")
 
                 if let errorMessage {
                     Text(errorMessage).font(.title3).foregroundStyle(.red)
                 }
-                if let saved {
-                    SavedSummary(extraction: saved)
+
+                if !turns.isEmpty && phase != .finished && phase != .saving {
+                    Button("今日はここまでにする") {
+                        Task { await finish(say: Interviewer.closing) }
+                    }
+                    .font(.title3)
+                    .accessibilityIdentifier("endButton")
                 }
             }
             .padding(24)
         }
         .navigationTitle("今日のこと")
+        .task {
+            guard !started else { return }
+            started = true
+            turns = [InterviewTurn(.ai, Interviewer.firstQuestion)]
+            await speakThenListen(Interviewer.firstQuestion)
+        }
+        .onDisappear {
+            voice.stop()
+            Speaker.shared.stop()
+        }
     }
 
-    private func save() async {
-        isWorking = true
+    @ViewBuilder private var answerControls: some View {
+        if voiceEnabled {
+            MicButton(voice: voice) { spoken in
+                Task { await handleAnswer(spoken) }
+            }
+        }
+        HStack {
+            TextField("文字で答える", text: $typed, axis: .vertical)
+                .font(.title3)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("answerInput")
+            Button("送る") {
+                let text = typed
+                typed = ""
+                Task { await handleAnswer(text) }
+            }
+            .font(.title3.bold())
+            .disabled(typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityIdentifier("sendAnswer")
+        }
+    }
+
+    private func speakThenListen(_ text: String) async {
+        phase = .speaking
+        if voiceEnabled {
+            await Speaker.shared.sayAndWait(text)
+        }
+        guard phase == .speaking else { return }
+        phase = .listening
+        if voiceEnabled {
+            await voice.start { spoken in
+                Task { await handleAnswer(spoken) }
+            }
+        }
+    }
+
+    private func handleAnswer(_ text: String) async {
+        let answer = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !answer.isEmpty, phase == .listening || phase == .speaking else { return }
+        voice.stop()
+        Speaker.shared.stop()
         errorMessage = nil
-        defer { isWorking = false }
+        turns.append(InterviewTurn(.user, answer))
+        phase = .thinking
+        do {
+            let step = try await Interviewer(client: ClaudeClient(apiKey: APIKeyStore.load())).next(after: turns)
+            if step.done {
+                await finish(say: step.say)
+            } else {
+                turns.append(InterviewTurn(.ai, step.say))
+                await speakThenListen(step.say)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            phase = .listening
+        }
+    }
+
+    /// Ends the conversation and saves today's record (appending to an earlier talk today, if any).
+    private func finish(say closing: String) async {
+        voice.stop()
+        turns.append(InterviewTurn(.ai, closing))
+        phase = .saving
+        if voiceEnabled { Speaker.shared.say(closing) }
+        guard turns.contains(where: { $0.speaker == .user }) else {
+            phase = .finished
+            return
+        }
         let dc = DayCalendar()
         let today = dc.key(for: Date())
-        // Append to today's transcript so several talks in one day become one record.
         let previous = RecordStore.day(today, in: context)?.record?.transcript ?? ""
-        let transcript = previous.isEmpty ? text : previous + "\n" + text
+        let talk = Interviewer.transcript(of: turns)
+        let transcript = previous.isEmpty ? talk : previous + "\n" + talk
         do {
             let extraction = try await Recorder(client: ClaudeClient(apiKey: APIKeyStore.load())).extract(transcript: transcript)
             try RecordStore.save(DayRecord(date: today, transcript: transcript, extraction: extraction), in: context)
             saved = extraction
-            text = ""
-            Speaker.shared.say("記録しました。" + extraction.summary)
+            phase = .finished
         } catch {
             errorMessage = error.localizedDescription
+            phase = .listening
         }
     }
 }

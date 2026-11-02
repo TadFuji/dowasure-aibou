@@ -144,15 +144,21 @@ final class VoiceInput {
 
 /// Reads text aloud in Japanese.
 @MainActor
-final class Speaker {
+final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
     static let shared = Speaker()
     private let synthesizer = AVSpeechSynthesizer()
+    private var finished: CheckedContinuation<Void, Never>?
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
 
     /// "slow" or "normal", chosen in settings (key "speechSpeed").
     var speed: String { UserDefaults.standard.string(forKey: "speechSpeed") ?? "slow" }
 
     func say(_ text: String) {
-        synthesizer.stopSpeaking(at: .immediate)
+        stop()
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "ja-JP")
@@ -160,8 +166,29 @@ final class Speaker {
         synthesizer.speak(utterance)
     }
 
+    /// Speaks and returns when speaking has finished (or was stopped).
+    func sayAndWait(_ text: String) async {
+        say(text)
+        await withCheckedContinuation { finished = $0 }
+    }
+
     func stop() {
         synthesizer.stopSpeaking(at: .immediate)
+        resumeWaiter()
+    }
+
+    private func resumeWaiter() {
+        finished?.resume()
+        finished = nil
+    }
+
+    // Delegate callbacks may arrive off the main actor, so they hop back explicitly.
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.resumeWaiter() }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.resumeWaiter() }
     }
 }
 

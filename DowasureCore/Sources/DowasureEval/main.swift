@@ -96,6 +96,35 @@ func readAPIKey() -> String {
     return key
 }
 
+// --interview-demo: plays the evening conversation against the real API with scripted answers,
+// then runs extraction on it. For checking the interviewer's tone and limits by eye.
+if CommandLine.arguments.contains("--interview-demo") {
+    let client = ClaudeClient(apiKey: readAPIKey())
+    let interviewer = Interviewer(client: client)
+    let answers = [
+        "午前中に公民館の囲碁クラブに行って、村上さんと二局打ちました",
+        "はい、村上さんです。一勝一敗でした",
+        "来週の木曜日にまた打とうと約束しました",
+        "午後は駅前の薬局に寄って、それから家で昼寝をしました",
+        "特にないです。ちょっと疲れました",
+        "はい", "はい", "はい",
+    ]
+    var turns = [InterviewTurn(.ai, Interviewer.firstQuestion)]
+    print("聞き手: \(Interviewer.firstQuestion)")
+    for answer in answers {
+        turns.append(InterviewTurn(.user, answer))
+        print("本人: \(answer)")
+        let step = try await interviewer.next(after: turns, today: asked("2026-11-03"), dayCalendar: tokyo)
+        turns.append(InterviewTurn(.ai, step.say))
+        print("聞き手: \(step.say)\(step.done ? "（終了）" : "")")
+        if step.done { break }
+    }
+    let extraction = try await Recorder(client: client).extract(transcript: Interviewer.transcript(of: turns))
+    print("\n要約: \(extraction.summary)")
+    print("人: \(extraction.people.map(\.name))  約束: \(extraction.promises.map(\.what))  場所: \(extraction.places.map(\.name))")
+    exit(0)
+}
+
 var answerer: Answerer?
 if live { answerer = Answerer(client: ClaudeClient(apiKey: readAPIKey()), retriever: retriever) }
 

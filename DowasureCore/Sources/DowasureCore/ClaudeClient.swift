@@ -72,9 +72,16 @@ public struct ClaudeClient: Sendable {
         let cache_control: [String: String] = ["type": "ephemeral"]
     }
 
-    struct Message: Encodable {
-        let role: String
-        let content: String
+    /// One turn of a conversation sent to the model.
+    public struct Message: Encodable, Sendable, Equatable {
+        public let role: String
+        public let content: String
+        public init(role: String, content: String) {
+            self.role = role
+            self.content = content
+        }
+        public static func user(_ text: String) -> Message { Message(role: "user", content: text) }
+        public static func assistant(_ text: String) -> Message { Message(role: "assistant", content: text) }
     }
 
     struct OutputConfig: Encodable {
@@ -105,7 +112,7 @@ public struct ClaudeClient: Sendable {
     }
 
     /// Builds the HTTP request. Separate so tests can inspect it.
-    func makeRequest(model: ClaudeModel, system: String, user: String,
+    func makeRequest(model: ClaudeModel, system: String, messages: [Message],
                      schema: JSONValue, effort: String?, maxTokens: Int) throws -> URLRequest {
         guard !apiKey.isEmpty else { throw ClaudeError.missingAPIKey }
         var request = URLRequest(url: Self.endpoint)
@@ -118,7 +125,7 @@ public struct ClaudeClient: Sendable {
             model: model.rawValue,
             max_tokens: maxTokens,
             system: [SystemBlock(text: system)],
-            messages: [Message(role: "user", content: user)],
+            messages: messages,
             output_config: OutputConfig(format: .init(schema: schema), effort: effort)
         )
         let encoder = JSONEncoder()
@@ -131,7 +138,15 @@ public struct ClaudeClient: Sendable {
     public func structured<T: Decodable>(_ type: T.Type, model: ClaudeModel, system: String, user: String,
                                          schema: JSONValue, effort: String? = nil,
                                          maxTokens: Int = 8000) async throws -> (T, Usage?) {
-        let request = try makeRequest(model: model, system: system, user: user,
+        try await structured(type, model: model, system: system, messages: [.user(user)],
+                             schema: schema, effort: effort, maxTokens: maxTokens)
+    }
+
+    /// Multi-turn version. `messages` must start with a user turn and alternate roles.
+    public func structured<T: Decodable>(_ type: T.Type, model: ClaudeModel, system: String, messages: [Message],
+                                         schema: JSONValue, effort: String? = nil,
+                                         maxTokens: Int = 8000) async throws -> (T, Usage?) {
+        let request = try makeRequest(model: model, system: system, messages: messages,
                                       schema: schema, effort: effort, maxTokens: maxTokens)
         let (data, http) = try await transport.send(request)
         guard (200..<300).contains(http.statusCode) else {

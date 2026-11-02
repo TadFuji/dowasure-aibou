@@ -170,3 +170,37 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         #expect(body.contains("2026-10-08"))
     }
 }
+
+@Suite struct InterviewerTests {
+    @Test func messagesStartWithUserAndAlternate() {
+        let turns = [InterviewTurn(.ai, Interviewer.firstQuestion), InterviewTurn(.user, "山田さんに会いました"),
+                     InterviewTurn(.user, "駅前で"), InterviewTurn(.ai, "山田さん、とおっしゃいましたか？")]
+        let m = Interviewer.messages(for: turns, today: date("2026-11-03"), dayCalendar: tokyo)
+        #expect(m.map(\.role) == ["user", "assistant", "user", "assistant"])
+        #expect(m[0].content.contains("11月3日"))
+        #expect(m[2].content == "山田さんに会いました\n駅前で")
+    }
+
+    @Test func stopsAtQuestionLimitWithoutNetwork() async throws {
+        let fake = FakeTransport(body: "")
+        let interviewer = Interviewer(client: ClaudeClient(apiKey: "k", transport: fake), maxQuestions: 2)
+        let turns = [InterviewTurn(.ai, "q1"), InterviewTurn(.user, "a1"), InterviewTurn(.ai, "q2"), InterviewTurn(.user, "a2")]
+        let step = try await interviewer.next(after: turns, today: date("2026-11-03"), dayCalendar: tokyo)
+        #expect(step == InterviewStep(say: Interviewer.closing, done: true))
+        #expect(fake.lastRequest == nil)
+    }
+
+    @Test func emptySayBecomesClosing() async throws {
+        let fake = FakeTransport(body: FakeTransport.messages(text: #"{"say":"","done":false}"#))
+        let interviewer = Interviewer(client: ClaudeClient(apiKey: "k", transport: fake))
+        let step = try await interviewer.next(after: [InterviewTurn(.ai, "q1"), InterviewTurn(.user, "a1")],
+                                              today: date("2026-11-03"), dayCalendar: tokyo)
+        #expect(step.done)
+        #expect(step.say == Interviewer.closing)
+    }
+
+    @Test func transcriptLabelsSpeakers() {
+        let t = Interviewer.transcript(of: [InterviewTurn(.ai, "誰かと会いましたか？"), InterviewTurn(.user, "妻と散歩しました")])
+        #expect(t == "聞き手: 誰かと会いましたか？\n本人: 妻と散歩しました")
+    }
+}
