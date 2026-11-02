@@ -10,6 +10,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "DowasureCore"),
+        .executableTarget(name: "DowasureEval", dependencies: ["DowasureCore"]),
         .testTarget(name: "DowasureCoreTests", dependencies: ["DowasureCore"]),
     ]
 )

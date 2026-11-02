@@ -16,3 +16,6 @@ xcuserdata/
 secrets/
 private-data/
 *.local.json
+
+# Evaluation output
+DowasureCore/eval-results/

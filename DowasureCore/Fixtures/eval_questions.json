@@ -1,0 +1,364 @@
+[
+  {
+    "id": "q01",
+    "question": "ことりの喫茶店で、10月9日に食べたケーキっていくらだったっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-09"
+    ],
+    "expected_keywords": [
+      "520"
+    ],
+    "category": "number"
+  },
+  {
+    "id": "q02",
+    "question": "赤い縁の眼鏡をかけてた人、名前なんだっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-09-18"
+    ],
+    "expected_keywords": [
+      "森本"
+    ],
+    "category": "glasses_trap"
+  },
+  {
+    "id": "q03",
+    "question": "銀色の眼鏡の人って誰だったかしら、図書館にいた人",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-14"
+    ],
+    "expected_keywords": [
+      "柏木"
+    ],
+    "category": "glasses_trap"
+  },
+  {
+    "id": "q04",
+    "question": "碁の会って結局いつだっけ",
+    "today": "2026-10-10",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-07"
+    ],
+    "expected_keywords": [
+      "13日"
+    ],
+    "category": "promise_changed"
+  },
+  {
+    "id": "q05",
+    "question": "村瀬さんとの碁、最初は何勝何敗だったっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-13"
+    ],
+    "expected_keywords": [
+      "3勝2敗"
+    ],
+    "category": "same_event_trap"
+  },
+  {
+    "id": "q06",
+    "question": "この前行った温泉、入浴料いくらだったっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-19"
+    ],
+    "expected_keywords": [
+      "750"
+    ],
+    "category": "same_place_trap"
+  },
+  {
+    "id": "q07",
+    "question": "9月27日に温泉に一緒に行った人、誰だっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-09-27"
+    ],
+    "expected_keywords": [
+      "田村"
+    ],
+    "category": "similar_name"
+  },
+  {
+    "id": "q08",
+    "question": "すだちをくれた隣の人、あれ何さんだっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-09-15"
+    ],
+    "expected_keywords": [
+      "村田"
+    ],
+    "category": "similar_name"
+  },
+  {
+    "id": "q09",
+    "question": "田村さんのお孫さんがやってるスポーツ、何だっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-09-27",
+      "2026-10-23"
+    ],
+    "expected_keywords": [
+      "野球"
+    ],
+    "category": "person"
+  },
+  {
+    "id": "q10",
+    "question": "孫の運動会で、リレーは何位だったっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-04"
+    ],
+    "expected_keywords": [
+      "2位",
+      "二位"
+    ],
+    "category": "number"
+  },
+  {
+    "id": "q11",
+    "question": "先週図書館で借りた本の題名、何だっけ",
+    "today": "2026-10-19",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-14"
+    ],
+    "expected_keywords": [
+      "海辺の灯台守"
+    ],
+    "category": "time_word"
+  },
+  {
+    "id": "q12",
+    "question": "先週、図書館で何を借りたんだっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-28"
+    ],
+    "expected_keywords": [
+      "山の天気図鑑"
+    ],
+    "category": "time_word"
+  },
+  {
+    "id": "q13",
+    "question": "先月、柿って何個とれたっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-01"
+    ],
+    "expected_keywords": [
+      "32"
+    ],
+    "category": "time_word"
+  },
+  {
+    "id": "q14",
+    "question": "次の碁の会っていつだったっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-27"
+    ],
+    "expected_keywords": [
+      "10日"
+    ],
+    "category": "future_promise"
+  },
+  {
+    "id": "q15",
+    "question": "息子が帰ってくるのいつだっけ、駅に何時だっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-11"
+    ],
+    "expected_keywords": [
+      "3日"
+    ],
+    "category": "future_promise"
+  },
+  {
+    "id": "q16",
+    "question": "美容室の予約って何時だったっけ",
+    "today": "2026-10-25",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-21"
+    ],
+    "expected_keywords": [
+      "3時",
+      "15時"
+    ],
+    "category": "future_promise"
+  },
+  {
+    "id": "q17",
+    "question": "田村さんと応援に行く約束、いつだったかな",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-23"
+    ],
+    "expected_keywords": [
+      "8日"
+    ],
+    "category": "future_promise"
+  },
+  {
+    "id": "q18",
+    "question": "洗濯機の修理代って結局いくらだったっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-18"
+    ],
+    "expected_keywords": [
+      "8,500",
+      "8500"
+    ],
+    "category": "number"
+  },
+  {
+    "id": "q19",
+    "question": "10月6日の町内会で、掃除は何時集合って言ってたっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-06"
+    ],
+    "expected_keywords": [
+      "8時"
+    ],
+    "category": "detail"
+  },
+  {
+    "id": "q20",
+    "question": "公園で見かけた猫、何色だったっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-16"
+    ],
+    "expected_keywords": [
+      "白"
+    ],
+    "category": "detail"
+  },
+  {
+    "id": "q21",
+    "question": "きのう、柿を誰にあげたんだっけ",
+    "today": "2026-11-01",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-31"
+    ],
+    "expected_keywords": [
+      "村田"
+    ],
+    "category": "time_word"
+  },
+  {
+    "id": "q22",
+    "question": "10月25日の掃除、何人集まったっけ",
+    "today": "2026-11-02",
+    "expected_found": true,
+    "expected_dates": [
+      "2026-10-25"
+    ],
+    "expected_keywords": [
+      "12"
+    ],
+    "category": "number"
+  },
+  {
+    "id": "u01",
+    "question": "10月8日って何してたんだっけ",
+    "today": "2026-11-02",
+    "expected_found": false,
+    "expected_dates": [],
+    "expected_keywords": [],
+    "category": "unanswerable_nodate"
+  },
+  {
+    "id": "u02",
+    "question": "森本さんの電話番号って何番だっけ",
+    "today": "2026-11-02",
+    "expected_found": false,
+    "expected_dates": [],
+    "expected_keywords": [],
+    "category": "unanswerable_near_miss"
+  },
+  {
+    "id": "u03",
+    "question": "柏木さんの下の名前、何だっけ",
+    "today": "2026-11-02",
+    "expected_found": false,
+    "expected_dates": [],
+    "expected_keywords": [],
+    "category": "unanswerable_near_miss"
+  },
+  {
+    "id": "u04",
+    "question": "10月9日に孫と行った映画館、何て名前だったっけ",
+    "today": "2026-11-02",
+    "expected_found": false,
+    "expected_dates": [],
+    "expected_keywords": [],
+    "category": "unanswerable_near_miss"
+  },
+  {
+    "id": "u05",
+    "question": "ひだまり温泉の駐車場代、いくらだったっけ",
+    "today": "2026-11-02",
+    "expected_found": false,
+    "expected_dates": [],
+    "expected_keywords": [],
+    "category": "unanswerable_near_miss"
+  },
+  {
+    "id": "u06",
+    "question": "先週、歯医者の予約って何時にしたんだっけ",
+    "today": "2026-11-02",
+    "expected_found": false,
+    "expected_dates": [],
+    "expected_keywords": [],
+    "category": "unanswerable_time_word"
+  },
+  {
+    "id": "u07",
+    "question": "娘の彩香の誕生日っていつだっけ",
+    "today": "2026-11-02",
+    "expected_found": false,
+    "expected_dates": [],
+    "expected_keywords": [],
+    "category": "unanswerable_near_miss"
+  },
+  {
+    "id": "u08",
+    "question": "運動会のあとの打ち上げ、どこのお店だったっけ",
+    "today": "2026-11-02",
+    "expected_found": false,
+    "expected_dates": [],
+    "expected_keywords": [],
+    "category": "unanswerable_near_miss"
+  }
+]

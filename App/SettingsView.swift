@@ -7,9 +7,18 @@ struct SettingsView: View {
     @State private var apiKey = APIKeyStore.load()
     @State private var message: String?
     @State private var confirmDelete = false
+    @AppStorage("speechSpeed") private var speechSpeed = "slow"
 
     var body: some View {
         Form {
+            Section("読み上げの速さ") {
+                Picker("速さ", selection: $speechSpeed) {
+                    Text("ゆっくり").tag("slow")
+                    Text("ふつう").tag("normal")
+                }
+                .pickerStyle(.segmented)
+                Button("試しに読み上げる") { Speaker.shared.say("今日も一日、おつかれさまでした。") }
+            }
             Section("APIキー") {
                 SecureField("sk-ant-…", text: $apiKey)
                     .textContentType(.password)

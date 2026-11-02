@@ -9,12 +9,16 @@ struct TalkView: View {
     @State private var isWorking = false
     @State private var saved: Extraction?
     @State private var errorMessage: String?
+    @State private var voice = VoiceInput()
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("今日は、どなたかと会ったり、話したりしましたか？")
                     .font(.title2.bold())
+                MicButton(voice: voice) { spoken in
+                    text = text.isEmpty ? spoken : text + "\n" + spoken
+                }
                 TextEditor(text: $text)
                     .font(.title3)
                     .frame(minHeight: 200)
@@ -53,6 +57,7 @@ struct TalkView: View {
             try RecordStore.save(DayRecord(date: today, transcript: transcript, extraction: extraction), in: context)
             saved = extraction
             text = ""
+            Speaker.shared.say("記録しました。" + extraction.summary)
         } catch {
             errorMessage = error.localizedDescription
         }

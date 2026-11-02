@@ -9,12 +9,17 @@ struct AskView: View {
     @State private var isWorking = false
     @State private var result: VerifiedAnswer?
     @State private var errorMessage: String?
+    @State private var voice = VoiceInput()
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("何を思い出したいですか？")
                     .font(.title2.bold())
+                MicButton(voice: voice) { spoken in
+                    question = spoken
+                    Task { await ask() }
+                }
                 TextField("例：先週、駅前で会った眼鏡の人の名前", text: $question, axis: .vertical)
                     .font(.title3)
                     .lineLimit(2...4)
@@ -50,7 +55,9 @@ struct AskView: View {
         defer { isWorking = false }
         do {
             let answerer = Answerer(client: ClaudeClient(apiKey: APIKeyStore.load()))
-            result = try await answerer.answer(question, records: RecordStore.allRecords(context))
+            let answer = try await answerer.answer(question, records: RecordStore.allRecords(context))
+            result = answer
+            Speaker.shared.say(answer.displayText)
         } catch {
             errorMessage = error.localizedDescription
         }
