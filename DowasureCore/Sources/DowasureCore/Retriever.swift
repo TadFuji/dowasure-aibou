@@ -119,10 +119,20 @@ public struct Retriever: Sendable {
         // Weak signal: shared character pairs with the record's text.
         let text = Self.normalize(Prompts.renderRecords([record]))
         s += questionGrams.intersection(Self.bigrams(text)).count
+        // Single kanji nouns (e.g. "柿") are missed by pairs, so shared kanji count too.
+        s += 2 * Self.kanji(Self.normalize(question)).intersection(Self.kanji(text)).count
         return s
     }
 
     static let ignoredGrams: Set<String> = ["何だ", "だっ", "っけ", "あれ", "って", "した", "です", "ます", "けど", "たっ", "ので", "った", "いた"]
+
+    static let ignoredKanji: Set<Character> = ["何", "先", "今", "月", "日", "週", "年", "前", "後", "時", "個", "人", "行", "会", "言", "思", "出", "入", "見", "来", "最", "近", "間"]
+
+    static func kanji(_ s: String) -> Set<Character> {
+        Set(s.filter { ch in
+            ch.unicodeScalars.allSatisfy { (0x4E00...0x9FFF).contains($0.value) } && !ignoredKanji.contains(ch)
+        })
+    }
 
     static func normalize(_ s: String) -> String {
         s.applyingTransform(.fullwidthToHalfwidth, reverse: false)?.lowercased() ?? s.lowercased()

@@ -116,6 +116,13 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         #expect(top.map(\.date) == ["2026-11-03", "2026-11-05"])
     }
 
+    @Test func singleKanjiNounFindsDayInWideRange() {
+        var records = (1...20).map { record(String(format: "2026-10-%02d", $0 + 10), summary: "散歩をした") }
+        records.append(record("2026-10-02", summary: "庭の柿を十二個とった"))
+        let top = retriever.candidates(for: "先月、柿って何個とれたっけ", in: records, today: today)
+        #expect(top.first?.date == "2026-10-02")
+    }
+
     @Test func respectsMaxRecords() {
         let records = (1...20).map { record(String(format: "2026-10-%02d", $0), summary: "散歩") }
         #expect(retriever.candidates(for: "散歩", in: records, today: today).count == 7)
