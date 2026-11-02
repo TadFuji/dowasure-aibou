@@ -59,7 +59,8 @@ struct SettingsView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(voice.name).font(.title2)
-                                Text(Self.qualityLabel(voice.quality)).font(.body).foregroundStyle(.secondary)
+                                Text((voice.gender == .male ? "男性・" : voice.gender == .female ? "女性・" : "") + Self.qualityLabel(voice.quality))
+                                    .font(.body).foregroundStyle(.secondary)
                             }
                             Spacer()
                             if voice.identifier == currentVoiceID {

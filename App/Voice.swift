@@ -172,16 +172,28 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
 
     static let voiceKey = "voiceIdentifier"
 
-    /// Japanese voices installed on this iPhone, most natural first (premium, enhanced, then default).
+    /// Regular Japanese voices installed on this iPhone, most natural first (premium, enhanced, compact).
+    /// Only Apple's standard voices ("com.apple.voice.*") are offered: the character voices
+    /// ("com.apple.eloquence.*" such as Eddy or Grandpa) sound deliberately mechanical and scared the user.
     static var japaneseVoices: [AVSpeechSynthesisVoice] {
         AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language == "ja-JP" }
-            .sorted { $0.quality.rawValue != $1.quality.rawValue ? $0.quality.rawValue > $1.quality.rawValue : $0.name < $1.name }
+            .filter { isRegularJapanese($0.identifier) && $0.language == "ja-JP" }
+            .sorted { a, b in
+                // A gentle female voice is the default the user asked for; then the more natural quality.
+                let af = a.gender == .female, bf = b.gender == .female
+                if af != bf { return af }
+                if a.quality.rawValue != b.quality.rawValue { return a.quality.rawValue > b.quality.rawValue }
+                return a.name < b.name
+            }
     }
 
-    /// The voice chosen in settings, or the most natural installed one.
+    static func isRegularJapanese(_ identifier: String) -> Bool {
+        identifier.hasPrefix("com.apple.voice.") && !identifier.contains("super-compact")
+    }
+
+    /// The voice chosen in settings, or the most natural regular voice, or the system default.
     var voice: AVSpeechSynthesisVoice? {
-        if let id = UserDefaults.standard.string(forKey: Self.voiceKey),
+        if let id = UserDefaults.standard.string(forKey: Self.voiceKey), Self.isRegularJapanese(id),
            let chosen = AVSpeechSynthesisVoice(identifier: id) {
             return chosen
         }
