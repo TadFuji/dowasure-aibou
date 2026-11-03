@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 鍵や個人情報が見えている（非公開で報告）
+    url: https://github.com/TadFuji/dowasure-aibou/security/advisories/new
+    about: セキュリティの問題は、公開の Issue ではなくこちらから知らせてください。
