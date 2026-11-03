@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import SwiftData
 import DowasureCore
@@ -24,6 +25,10 @@ struct DowasureApp: App {
             }
         }
         #if DEBUG
+        // Lists the Japanese voices this device offers to apps (checked when choosing voices).
+        for v in AVSpeechSynthesisVoice.speechVoices() where v.language == "ja-JP" {
+            print("VOICE \(v.name) | \(v.identifier) | quality=\(v.quality.rawValue) | gender=\(v.gender.rawValue)")
+        }
         // Live UI tests hand the key over from the developer's local secrets file.
         if let key = ProcessInfo.processInfo.environment["DOWASURE_UITEST_API_KEY"], !key.isEmpty {
             APIKeyStore.save(key)
