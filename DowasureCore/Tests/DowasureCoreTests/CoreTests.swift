@@ -265,3 +265,66 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         #expect(CloudVoice.audioChunk(fromSSELine: "") == nil)
     }
 }
+
+@Suite struct HintSessionTests {
+    func found(hints: [String] = ["駅前の喫茶店で会った方です。", "お名前は『も』で始まります。"]) -> VerifiedAnswer {
+        let raw = ModelAnswer(found: true, answer: "森田さんです。", evidenceDates: ["2026-10-08"], confidence: .high,
+                              followupQuestion: "", hints: hints, answerKeywords: ["森田", "もりた"])
+        return Answerer.verify(raw, candidates: [record("2026-10-08", summary: "駅前で森田さんに会った")], dayCalendar: tokyo)
+    }
+
+    @Test func startsWithHintNotAnswer() {
+        var s = HintSession(answer: found())
+        let r = s.start()
+        #expect(!r.revealed)
+        #expect(r.text.contains("駅前の喫茶店"))
+        #expect(!r.text.contains("森田"))
+    }
+
+    @Test func correctGuessInKanaIsAccepted() {
+        var s = HintSession(answer: found())
+        _ = s.start()
+        let r = s.respond(to: "もりたさん？")
+        #expect(r.revealed)
+        #expect(r.text.hasPrefix("そうです！"))
+        #expect(r.text.contains("10月8日の記録より"))
+    }
+
+    @Test func wrongGuessGivesNextHintThenOffersAnswer() {
+        var s = HintSession(answer: found())
+        _ = s.start()
+        let r1 = s.respond(to: "山田さん")
+        #expect(!r1.revealed && r1.text.contains("『も』"))
+        let r2 = s.respond(to: "田中さん")
+        #expect(!r2.revealed && r2.text.contains("答えを教えて"))
+    }
+
+    @Test func askingForAnswerReveals() {
+        var s = HintSession(answer: found())
+        _ = s.start()
+        let r = s.respond(to: "わからないので答えを教えて")
+        #expect(r.revealed && r.text == "10月8日の記録より：森田さんです。")
+    }
+
+    @Test func hintThatLeaksAnswerIsDropped() {
+        let a = found(hints: ["森田さんという方です。", "駅前でお会いしました。"])
+        #expect(a.hints == ["駅前でお会いしました。"])
+    }
+
+    @Test func notFoundSaysSoImmediately() {
+        let raw = ModelAnswer(found: false, answer: "", evidenceDates: [], confidence: .low, followupQuestion: "どこで会いましたか？")
+        var s = HintSession(answer: Answerer.verify(raw, candidates: [], dayCalendar: tokyo))
+        #expect(s.start().text.hasPrefix("記録には見当たりません。"))
+    }
+}
+
+@Suite struct MemoLogTests {
+    @Test func linesCarryTimeAndAppend() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+        let d = tokyo.date(from: "2026-11-03")!.addingTimeInterval(16 * 3600 + 5 * 60)
+        let t = MemoLog.appending("にんじんを買う", at: d, to: "[9:00] 薬局に寄る", calendar: cal)
+        #expect(t == "[9:00] 薬局に寄る\n[16:05] にんじんを買う")
+        #expect(MemoLog.confirmation(for: " にんじんを買う ") == "「にんじんを買う」ですね。覚えました。")
+    }
+}

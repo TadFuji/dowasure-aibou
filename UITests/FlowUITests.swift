@@ -67,34 +67,34 @@ final class FlowUITests: XCTestCase {
         app.launchEnvironment["DOWASURE_UITEST_API_KEY"] = key
         app.launch()
 
+        // Say something to remember; it is repeated back and listed at once.
         app.buttons["talkButton"].tap()
-        XCTAssertTrue(app.staticTexts["今日は、どなたかと会ったり、話したりしましたか？"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["覚えておきたいことを、話してください。"].waitForExistence(timeout: 5))
         let input = app.textFields["answerInput"]
-        XCTAssertTrue(input.waitForExistence(timeout: 5))
         input.tap()
-        input.typeText("午後に図書館へ行って、司書の青山さんと話しました")
+        input.typeText("4時に図書館で、司書の青山さんに本を返す")
         app.buttons["sendAnswer"].tap()
+        let confirmation = app.staticTexts["aiQuestion"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.label.contains("覚えました"), confirmation.label)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "青山さんに本を返す")).firstMatch.exists)
 
-        // The AI asks a follow-up question; the first question is replaced.
-        let firstGone = NSPredicate(format: "label != %@", "今日は、どなたかと会ったり、話したりしましたか？")
-        let changed = XCTNSPredicateExpectation(predicate: firstGone, object: app.staticTexts["aiQuestion"])
-        XCTAssertEqual(XCTWaiter().wait(for: [changed], timeout: 60), .completed)
-
-        app.buttons["endButton"].tap()
-        XCTAssertTrue(app.otherElements["savedSummary"].firstMatch.waitForExistence(timeout: 60)
-                      || app.staticTexts["記録しました"].waitForExistence(timeout: 1))
-
+        // Ask about it: a hint comes first (without the name), the answer when asked for.
         app.buttons["homeButton"].tap()
         app.buttons["askButton"].tap()
         let ask = app.textFields["askInput"]
         ask.tap()
-        ask.typeText("今日図書館で話した人の名前")
+        ask.typeText("今日、本を返す相手の名前")
         app.buttons["askSubmit"].tap()
-        let answer = app.staticTexts["answerText"]
-        XCTAssertTrue(answer.waitForExistence(timeout: 60))
-        XCTAssertTrue(answer.label.contains("の記録より："), answer.label)
-        XCTAssertTrue(answer.label.contains("青山"), answer.label)
+        let reply = app.staticTexts["answerText"]
+        XCTAssertTrue(reply.waitForExistence(timeout: 60))
+        XCTAssertTrue(reply.label.hasPrefix("ヒントです"), reply.label)
+        XCTAssertFalse(reply.label.contains("青山"), reply.label)
+        app.buttons["revealButton"].tap()
+        XCTAssertTrue(reply.label.contains("の記録より："), reply.label)
+        XCTAssertTrue(reply.label.contains("青山"), reply.label)
     }
+
 
     /// Scrolls the current screen until the element exists (Form rows load lazily).
     private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
@@ -145,7 +145,14 @@ final class FlowUITests: XCTestCase {
         app.buttons["askSubmit"].tap()
         let answer = app.staticTexts["answerText"]
         XCTAssertTrue(answer.waitForExistence(timeout: 60))
+        XCTAssertTrue(answer.label.hasPrefix("ヒントです"), answer.label)
+        XCTAssertFalse(answer.label.contains("森田"), answer.label)
+        // Naming the person (in kana) counts as remembering.
+        let guess = app.textFields["guessInput"]
+        guess.tap()
+        guess.typeText("もりたさん")
+        app.buttons["sendGuess"].tap()
+        XCTAssertTrue(answer.label.hasPrefix("そうです！"), answer.label)
         XCTAssertTrue(answer.label.contains("の記録より："), answer.label)
-        XCTAssertTrue(answer.label.contains("森田"), answer.label)
     }
 }

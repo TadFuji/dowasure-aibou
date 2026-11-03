@@ -19,6 +19,10 @@ struct DowasureApp: App {
         if args.contains("-uitest-reset") {
             APIKeyStore.save("")
         }
+        if args.contains("-uitest-no-voice") {
+            // Tests must not use the maker's daily Gemini voice quota.
+            APIKeyStore.save("", account: APIKeyStore.voiceAccount)
+        }
         if args.contains("-uitest-load-samples") {
             for record in SampleData.records(today: Date()) {
                 try? RecordStore.save(record, in: container.mainContext)

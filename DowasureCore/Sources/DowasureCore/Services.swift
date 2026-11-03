@@ -61,8 +61,13 @@ public struct Answerer: Sendable {
             let labels = evidence.map(dayCalendar.spokenLabel(for:)).joined(separator: "と")
             var text = "\(labels)の記録より：\(answer)"
             if !followup.isEmpty { text += "\n\(followup)" }
+            let keywords = raw.answerKeywords.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            // A hint that gives away the answer is dropped; the user should get the chance to recall.
+            let hints = raw.hints.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && !HintSession.matches($0, keywords: keywords) }
             return VerifiedAnswer(kind: .found(evidenceDates: evidence), answer: answer,
-                                  confidence: raw.confidence, followupQuestion: followup, displayText: text)
+                                  confidence: raw.confidence, followupQuestion: followup, displayText: text,
+                                  hints: hints, answerKeywords: keywords)
         }
         let question = followup.isEmpty ? "いつ頃のことか、覚えていますか？" : followup
         return VerifiedAnswer(kind: .notFound, answer: "", confidence: .low, followupQuestion: question,

@@ -77,16 +77,34 @@ public struct ModelAnswer: Codable, Sendable, Equatable {
     public var evidenceDates: [String]
     public var confidence: Confidence
     public var followupQuestion: String
+    /// Hints that help the user recall by themselves, weakest first. Must not contain the answer.
+    public var hints: [String]
+    /// Words that mean the user remembered correctly (e.g. "森田", "もりた").
+    public var answerKeywords: [String]
 
     enum CodingKeys: String, CodingKey {
-        case found, answer, confidence
+        case found, answer, confidence, hints
         case evidenceDates = "evidence_dates"
         case followupQuestion = "followup_question"
+        case answerKeywords = "answer_keywords"
     }
 
-    public init(found: Bool, answer: String, evidenceDates: [String], confidence: Confidence, followupQuestion: String) {
+    public init(found: Bool, answer: String, evidenceDates: [String], confidence: Confidence, followupQuestion: String,
+                hints: [String] = [], answerKeywords: [String] = []) {
         self.found = found; self.answer = answer; self.evidenceDates = evidenceDates
         self.confidence = confidence; self.followupQuestion = followupQuestion
+        self.hints = hints; self.answerKeywords = answerKeywords
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        found = try c.decode(Bool.self, forKey: .found)
+        answer = try c.decode(String.self, forKey: .answer)
+        evidenceDates = try c.decode([String].self, forKey: .evidenceDates)
+        confidence = try c.decode(Confidence.self, forKey: .confidence)
+        followupQuestion = try c.decode(String.self, forKey: .followupQuestion)
+        hints = try c.decodeIfPresent([String].self, forKey: .hints) ?? []
+        answerKeywords = try c.decodeIfPresent([String].self, forKey: .answerKeywords) ?? []
     }
 }
 
@@ -103,4 +121,7 @@ public struct VerifiedAnswer: Sendable, Equatable {
     public var followupQuestion: String
     /// Text for the screen and for speech, e.g. "10月8日の記録より：山田さんです。"
     public var displayText: String
+    /// Hints shown before the answer (empty when nothing was found).
+    public var hints: [String] = []
+    public var answerKeywords: [String] = []
 }

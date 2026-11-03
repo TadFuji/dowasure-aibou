@@ -24,7 +24,7 @@ enum EveningReminder {
 
         let content = UNMutableNotificationContent()
         content.title = "ど忘れ相棒"
-        content.body = "今日のことを、少しだけ聞かせてください。"
+        content.body = "忘れたくないことはありますか？話しておきましょう。"
         content.sound = .default
         let trigger = UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: hour, minute: minute), repeats: true)
         do {

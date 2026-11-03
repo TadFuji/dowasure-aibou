@@ -451,7 +451,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 
     /// Sentences the app always says. Their audio is kept on the iPhone so they play without waiting.
-    nonisolated static let fixedPhrases = [Interviewer.firstQuestion, Interviewer.closing, "今日も一日、おつかれさまでした。"]
+    nonisolated static let fixedPhrases = ["覚えておきたいことを、話してください。", "今日も一日、おつかれさまでした。"]
 
     nonisolated private static func style(for speed: String) -> String {
         speed == "slow" ? "calm, kind and warm, speaking slowly and clearly" : "calm, kind and warm"
@@ -523,6 +523,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 /// Large microphone button shared by the talk and ask screens.
 struct MicButton: View {
     let voice: VoiceInput
+    var idleTitle = "声で話す"
     let onText: (String) -> Void
 
     var body: some View {
@@ -534,7 +535,7 @@ struct MicButton: View {
                 Task { await voice.start(onFinish: onText) }
             }
         } label: {
-            Label(voice.isListening ? "話し終わった" : "声で話す",
+            Label(voice.isListening ? "話し終わった" : idleTitle,
                   systemImage: voice.isListening ? "stop.circle.fill" : "mic.fill")
                 .font(.title.bold())
                 .frame(maxWidth: .infinity, minHeight: 100)

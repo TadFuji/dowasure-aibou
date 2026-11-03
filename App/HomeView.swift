@@ -15,7 +15,7 @@ struct HomeView: View {
                     path.append(.ask)
                 }
                 .accessibilityIdentifier("askButton")
-                BigButton(title: "今日のことを話す", systemImage: "moon.stars", color: .indigo) {
+                BigButton(title: "覚えておくことを話す", systemImage: "square.and.pencil", color: .indigo) {
                     path.append(.talk)
                 }
                 .accessibilityIdentifier("talkButton")

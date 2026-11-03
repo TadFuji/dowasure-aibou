@@ -4,7 +4,7 @@ import Foundation
 public enum Prompts {
     public static let extractionSystem = """
     あなたは、高齢の利用者がその日の出来事を話した記録を整理する係です。
-    入力は、その日の会話の全文です（「聞き手:」は質問、「本人:」が利用者の言葉）。本人の言葉だけを根拠にしてください。次の決まりを守って、決められた形で返してください。
+    入力は、利用者がその日に「覚えておきたい」と話したこと（行頭の [時:分] は話した時刻）、または会話の全文です（「聞き手:」は質問、「本人:」が利用者の言葉）。本人の言葉だけを根拠にしてください。「今日の4時」「来週」などの言い方は、話した日を基準にそのまま残してください。次の決まりを守って、決められた形で返してください。
 
     - summary: その日の出来事を3〜5文で、利用者の立場から短くまとめる。
     - people: 会った人・話した人。name は話に出た呼び方のまま（例「山田さん」）。relation は間柄（分かれば）、note は特徴や話した内容。
@@ -54,19 +54,25 @@ public enum Prompts {
 
     public static let answerSystem = """
     あなたは、高齢の利用者の「ど忘れ」を手伝う係です。利用者の質問と、利用者自身が残した記録（日付つき）が渡されます。
-    次の決まりを守って、決められた形で返してください。
+    いきなり答えを言うのではなく、まずヒントで本人に思い出してもらうのが目的です。次の決まりを守って、決められた形で返してください。
 
-    - 渡された記録に書かれていることだけを根拠に答える。記録に無いことを推測で作らない。
-    - 答えが記録にある時: found を true にし、answer に短い答えを1〜2文で書く（日付は answer に書かなくてよい）。evidence_dates に根拠にした記録の日付（記録に書かれた yyyy-MM-dd の形）をすべて入れる。
-    - 答えが記録に無い時: found を false、answer を空、evidence_dates を空にする。followup_question に、思い出す手がかりになるやさしい質問を1つ書く（例「その方とは、どこで会いましたか？」）。
+    - 渡された記録に書かれていることだけを根拠にする。記録に無いことを推測で作らない。
+    - 答えが記録にある時: found を true にする。
+      - answer: 短い答えを1〜2文で（日付は書かなくてよい）。
+      - hints: 本人が自分で思い出せるようなヒントを、弱いものから順に2つ。答えそのもの（名前・数字・場所の名前など）は絶対に書かない。1つ目は状況（いつ・どこで・何をしていた時か）、2つ目はもう少し近づくもの（例「お名前は『も』で始まります」「丸い眼鏡をかけた方です」）。それぞれ1文。
+      - answer_keywords: 本人が思い出して口にした時に「正解」とみなせる言葉。名前なら漢字と読み（ひらがな）の両方（例「森田」「もりた」）。数字なら数字の書き方の違いも（例「8500」「8,500」「八千五百」）。
+      - evidence_dates: 根拠にした記録の日付（記録に書かれた yyyy-MM-dd の形）をすべて。
+    - 答えが記録に無い時: found を false、answer・hints・answer_keywords・evidence_dates を空にする。followup_question に、思い出す手がかりになるやさしい質問を1つ書く（例「その方とは、どこで会いましたか？」）。
     - confidence: 記録にはっきり書いてあれば high、手がかりから推し量った場合は medium、候補が複数あるなど迷う場合は low。
-    - found が true の時も、候補が複数あれば answer でそう伝え、followup_question で絞り込む質問をしてよい。不要なら空にする。
+    - 候補が複数ある時は、answer でそう伝え、followup_question で絞り込む質問をしてよい。不要なら空にする。
     - 敬語で、やさしく、短く。医療的な判断や助言はしない。
     """
 
     public static let answerSchema: JSONValue = Schema.object([
         "found": ["type": "boolean"],
         "answer": Schema.string,
+        "hints": Schema.array(Schema.string),
+        "answer_keywords": Schema.array(Schema.string),
         "evidence_dates": Schema.array(Schema.string),
         "confidence": ["type": "string", "enum": ["high", "medium", "low"]],
         "followup_question": Schema.string,
@@ -91,6 +97,12 @@ public enum Prompts {
             }
             if !e.events.isEmpty {
                 lines.append("出来事: " + e.events.joined(separator: "／"))
+            }
+            // Things the user asked to remember are short lines ("[16:05] にんじんを買う");
+            // include them as spoken, so nothing depends on the summary alone.
+            let memos = record.transcript.split(separator: "\n").filter { $0.hasPrefix("[") }
+            if !memos.isEmpty {
+                lines.append("話したこと: " + memos.joined(separator: "／"))
             }
             return lines.joined(separator: "\n")
         }.joined(separator: "\n\n")

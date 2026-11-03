@@ -34,6 +34,8 @@ struct QuestionResult: Codable {
     var answer: String?
     var evidenceDates: [String]?
     var correct: Bool?
+    var hints: [String]?
+    var hintLeaked: Bool?       // a hint contains the expected answer (should be false)
     var error: String?
 }
 
@@ -47,6 +49,8 @@ struct Summary: Codable {
     var retrievalRecallAt1: Double
     var answerAccuracy: Double?
     var noInventionRate: Double?
+    var hintAvailability: Double?   // correct answers that also came with at least one hint
+    var hintLeakRate: Double?       // correct answers whose hints already contained the answer
     var errorCount: Int?
 }
 
@@ -176,6 +180,8 @@ for q in questions {
         do {
             let a = try await answerer.answer(q.question, records: visible, today: now)
             r.answer = a.answer
+            r.hints = a.hints
+            r.hintLeaked = a.hints.contains { HintSession.matches($0, keywords: q.expectedKeywords) }
             switch a.kind {
             case .found(let dates):
                 r.gotFound = true
@@ -216,6 +222,9 @@ var summary = Summary(
 if live {
     summary.answerAccuracy = pct(answerable.filter { $0.correct == true }.count, answerable.count)
     summary.noInventionRate = pct(unanswerable.filter { $0.gotFound == false }.count, unanswerable.count)
+    let correctOnes = answerable.filter { $0.correct == true }
+    summary.hintAvailability = pct(correctOnes.filter { !($0.hints ?? []).isEmpty }.count, correctOnes.count)
+    summary.hintLeakRate = pct(correctOnes.filter { $0.hintLeaked == true }.count, correctOnes.count)
     summary.errorCount = results.filter { $0.error != nil }.count
 }
 
@@ -245,6 +254,10 @@ print("retrieval recall@1: \(top1Hits)/\(answerable.count) = \(fmt(summary.retri
 if live {
     print("answer accuracy: \(answerable.filter { $0.correct == true }.count)/\(answerable.count) = \(fmt(summary.answerAccuracy ?? 0))")
     print("no-invention rate: \(unanswerable.filter { $0.gotFound == false }.count)/\(unanswerable.count) = \(fmt(summary.noInventionRate ?? 0))")
+    let correctOnes = answerable.filter { $0.correct == true }
+    print("hint available (of correct): \(correctOnes.filter { !($0.hints ?? []).isEmpty }.count)/\(correctOnes.count) = \(fmt(summary.hintAvailability ?? 0))")
+    print("hint leaked the answer (of correct): \(correctOnes.filter { $0.hintLeaked == true }.count)/\(correctOnes.count) = \(fmt(summary.hintLeakRate ?? 0))")
+    for r in correctOnes where r.hintLeaked == true { print("  leak \(r.id): \(r.hints ?? [])") }
     print("errors: \(summary.errorCount ?? 0)")
 }
 
