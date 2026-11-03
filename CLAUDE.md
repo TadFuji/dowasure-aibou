@@ -4,7 +4,7 @@
 
 ## 守ること
 
-- 変更・問題・原因・対応・結果は `docs/開発記録.md` に時系列で必ず追記する（藤川さんの常設依頼。最終レポートの材料）。
+- 変更・問題・原因・対応・結果は `docs/開発記録.md` に時系列で必ず追記する（藤川さんの常設依頼。最終レポートの材料）。書き方は `.claude/skills/dev-log/` に従う。リポジトリを公開へ戻す前は `.claude/skills/pre-publish-check/` の点検をする。
 
 - このリポジトリは公開する。API キー・藤川さんの本物の記録・他人の実名を入れない。デモ用データは `SampleData.swift` の架空データだけ。`.githooks/pre-commit` が `sk-ant-` と `private-data/` をはじく（`git config core.hooksPath .githooks` が前提）。
 - 医療・診断めいた機能や文言を入れない。

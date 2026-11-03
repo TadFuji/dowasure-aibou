@@ -1,0 +1,49 @@
+name: 不具合の報告
+description: 動かない、落ちる、思った通りにならない時
+title: "[不具合] "
+labels: ["不具合"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ありがとうございます。**本物の記録・API キー・他の方のお名前は書かないでください。** 例を書く時は架空の内容にしてください。
+  - type: textarea
+    id: what
+    attributes:
+      label: 何が起きましたか
+      placeholder: 例）「覚えておくことを話す」を押して話したのに、何も保存されなかった
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: どう操作しましたか
+      placeholder: |
+        1. ホームで「あれ、何だっけ？」を押す
+        2. 「駅前で会った人の名前」と話す
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 本当はどうなってほしかったですか
+  - type: dropdown
+    id: where
+    attributes:
+      label: どこで起きましたか
+      options:
+        - 覚えておくことを話す
+        - あれ、何だっけ？（ヒント・答え）
+        - 声（読み上げ・待ち時間の音）
+        - 聞き取り（マイク）
+        - 毎晩のお知らせ
+        - 設定
+        - その他
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: iPhone の機種と iOS のバージョン
+      placeholder: 例）iPhone 15 Pro Max、iOS 27.2

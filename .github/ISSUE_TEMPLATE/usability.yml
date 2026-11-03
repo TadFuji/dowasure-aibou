@@ -1,0 +1,33 @@
+name: 使いにくさ・気づいたこと
+description: 見えにくい、聞こえにくい、分かりにくい、怖い、などの感想
+title: "[使いにくさ] "
+labels: ["使いにくさ"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        高齢の方が使うアプリです。「なんとなく分かりにくい」も大切な声です。感じたままの言葉で書いてください。
+        **本物の記録・API キー・他の方のお名前は書かないでください。**
+  - type: textarea
+    id: feeling
+    attributes:
+      label: 感じたこと（そのままの言葉で）
+      placeholder: 例）声がロボットっぽくて怖い／戻るボタンが小さくて分からない
+    validations:
+      required: true
+  - type: checkboxes
+    id: kind
+    attributes:
+      label: 当てはまるもの
+      options:
+        - label: 文字やボタンが見えにくい・小さい
+        - label: 音や声が聞こえにくい・聞き取りにくい
+        - label: 待ち時間が長い・気になる
+        - label: 何をすればいいか分からない
+        - label: 声や音が怖い・冷たい
+        - label: 押し間違えた時に戻せない
+  - type: textarea
+    id: who
+    attributes:
+      label: 使った方（差し支えない範囲で）
+      placeholder: 例）70代、老眼鏡を使う、補聴器は使わない
