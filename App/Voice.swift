@@ -285,6 +285,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         // A slight slowdown keeps the voice natural; slowing more makes it sound mechanical.
         utterance.rate = speed == "slow" ? AVSpeechUtteranceDefaultSpeechRate * 0.9 : AVSpeechUtteranceDefaultSpeechRate
         utterance.postUtteranceDelay = 0.2
+        utterance.pitchMultiplier = 0.9  // a little lower: easier to hear for older listeners
         currentUtterance = ObjectIdentifier(utterance)
         stopWaitingTone()
         synthesizer.speak(utterance)
@@ -350,7 +351,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         // Tone → soft echo → hall reverb, for a gentle, roomy sound rather than a bare electronic beep.
         toneEcho.delayTime = 0.32
         toneEcho.feedback = 25
-        toneEcho.lowPassCutoff = 3000
+        toneEcho.lowPassCutoff = 1500
         toneEcho.wetDryMix = 25
         toneReverb.loadFactoryPreset(.largeHall)
         toneReverb.wetDryMix = 45
@@ -377,7 +378,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         for i in 0..<total { out[i] = 0 }
         let noteFrames = Int(rate * noteLength)
         let attackFrames = Int(rate * 0.012)
-        let frequency = 659.25 // E5: soft and clear without being shrill
+        // G4. Older listeners often lose high frequencies, so the tone and its overtone stay below 1 kHz.
+        let frequency = 392.0
         for n in 0..<3 {
             let start = Int(rate * Double(n) * spacing)
             for i in 0..<noteFrames where start + i < total {
@@ -471,7 +473,10 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     nonisolated static let fixedPhrases = ["覚えておきたいことを、話してください。", "今日も一日、おつかれさまでした。"]
 
     nonisolated private static func style(for speed: String) -> String {
-        speed == "slow" ? "calm, kind and warm, speaking slowly and clearly" : "calm, kind and warm"
+        // Older listeners hear lower, slower, clearly articulated speech best.
+        speed == "slow"
+            ? "calm, kind and warm, a slightly low and soft pitch, speaking slowly and clearly with distinct consonants"
+            : "calm, kind and warm, a slightly low and soft pitch, speaking clearly"
     }
 
     /// Only fixed phrases are cached; answers that contain the user's records are not written to disk.
