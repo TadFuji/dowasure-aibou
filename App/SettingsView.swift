@@ -75,7 +75,7 @@ struct SettingsView: View {
                                 Text(item.label).font(.title2)
                                 Spacer()
                                 if item.name == cloudVoiceName {
-                                    Image(systemName: "checkmark.circle.fill").font(.title).foregroundStyle(.green)
+                                    Image(systemName: "checkmark.circle.fill").font(.title).foregroundStyle(Palette.green)
                                 }
                             }
                         }
@@ -95,7 +95,7 @@ struct SettingsView: View {
                             }
                             Spacer()
                             if voice.identifier == currentVoiceID {
-                                Image(systemName: "checkmark.circle.fill").font(.title).foregroundStyle(.green)
+                                Image(systemName: "checkmark.circle.fill").font(.title).foregroundStyle(Palette.green)
                             }
                         }
                     }
@@ -124,7 +124,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier("saveKeyButton")
                     if let keyMessage {
                         Label(keyMessage, systemImage: keyMessage == "保存しました。" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(keyMessage == "保存しました。" ? .green : .red)
+                            .foregroundStyle(keyMessage == "保存しました。" ? Palette.green : Palette.red)
                             .accessibilityIdentifier("keyMessage")
                     }
                     SecureField("自然な声のキー（Google AI Studio）", text: $voiceKey)
@@ -137,7 +137,7 @@ struct SettingsView: View {
                         }
                     }
                     if let voiceKeyMessage {
-                        Text(voiceKeyMessage).foregroundStyle(voiceKeyMessage == "保存しました。" ? .green : .red)
+                        Text(voiceKeyMessage).foregroundStyle(voiceKeyMessage == "保存しました。" ? Palette.green : Palette.red)
                     }
                     Button("架空の記録を入れる") { loadSamples() }
                         .accessibilityIdentifier("loadSamples")

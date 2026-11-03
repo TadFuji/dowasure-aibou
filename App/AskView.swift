@@ -35,7 +35,7 @@ struct AskView: View {
                 }
 
                 if let errorMessage {
-                    Text(errorMessage).font(.title2).foregroundStyle(.red)
+                    WarningText(text: errorMessage)
                 }
             }
             .padding(24)
@@ -57,7 +57,7 @@ struct AskView: View {
             .lineLimit(2...4)
             .textFieldStyle(.roundedBorder)
             .accessibilityIdentifier("askInput")
-        BigButton(title: isWorking ? "探しています…" : "聞いてみる", systemImage: "magnifyingglass", color: .orange) {
+        BigButton(title: isWorking ? "探しています…" : "聞いてみる", systemImage: "magnifyingglass", color: Palette.orange) {
             Task { await ask() }
         }
         .disabled(isWorking || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -90,7 +90,7 @@ struct AskView: View {
                 Text("もう少しヒント").font(.title2.bold()).frame(maxWidth: .infinity, minHeight: 72)
             }
             .buttonStyle(.bordered)
-            .tint(.orange)
+            .tint(Palette.orange)
             .accessibilityIdentifier("moreHintButton")
             Button {
                 show(session?.reveal())
@@ -98,7 +98,7 @@ struct AskView: View {
                 Text("答えを教えて").font(.title2.bold()).frame(maxWidth: .infinity, minHeight: 72)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.orange)
+            .tint(Palette.orange)
             .accessibilityIdentifier("revealButton")
         }
     }

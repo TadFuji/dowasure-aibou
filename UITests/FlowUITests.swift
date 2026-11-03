@@ -40,6 +40,24 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(message.label.contains("にお知らせします") || message.label.contains("通知が許可されていません"), message.label)
     }
 
+    /// An item is saved even without an API key, read back, and can be taken back.
+    func testRememberAndUndoWithoutKey() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest-reset", "-uitest-no-voice"]
+        app.launch()
+        app.buttons["talkButton"].tap()
+        let input = app.textFields["answerInput"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("にんじんを買う")
+        app.buttons["sendAnswer"].tap()
+        XCTAssertTrue(app.staticTexts["「にんじんを買う」ですね。覚えました。"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "] にんじんを買う")).firstMatch.exists)
+        app.buttons["undoButton"].tap()
+        XCTAssertTrue(app.staticTexts["取り消しました。"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "] にんじんを買う")).firstMatch.exists)
+    }
+
     /// Saving the key shows a confirmation right under the button.
     func testSavingKeyShowsConfirmation() {
         let app = XCUIApplication()

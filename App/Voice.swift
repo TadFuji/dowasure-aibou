@@ -4,6 +4,7 @@ import os
 import DowasureCore
 import Speech
 import SwiftUI
+import UIKit
 
 /// Turns the user's voice into text with Apple's speech recognizer (on-device when available).
 /// Stops by itself after silence (long wait before the first words, short pause after speaking).
@@ -58,6 +59,8 @@ final class VoiceInput {
             engine.prepare()
             try engine.start()
             state = .listening
+            // A short vibration as well as the screen change, for users who cannot hear well.
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             resetSilenceTimer()
 
             task = Self.startRecognition(recognizer: recognizer, request: request) { [weak self] transcript, done, errorText in
@@ -87,6 +90,7 @@ final class VoiceInput {
         guard state == .listening else { return }
         cleanUp()
         state = .idle
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         let finished = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let callback = onFinish
         onFinish = nil
@@ -470,7 +474,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 
     /// Sentences the app always says. Their audio is kept on the iPhone so they play without waiting.
-    nonisolated static let fixedPhrases = ["覚えておきたいことを、話してください。", "今日も一日、おつかれさまでした。"]
+    nonisolated static let fixedPhrases = ["覚えておきたいことを、話してください。", "今日も一日、おつかれさまでした。", "取り消しました。"]
 
     nonisolated private static func style(for speed: String) -> String {
         // Older listeners hear lower, slower, clearly articulated speech best.
@@ -560,10 +564,11 @@ struct MicButton: View {
             Label(voice.isListening ? "話し終わった" : idleTitle,
                   systemImage: voice.isListening ? "stop.circle.fill" : "mic.fill")
                 .font(.title.bold())
+                .wrapsForLargeText()
                 .frame(maxWidth: .infinity, minHeight: 100)
         }
         .buttonStyle(.borderedProminent)
-        .tint(voice.isListening ? .red : .green)
+        .tint(voice.isListening ? Palette.red : Palette.green)
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityIdentifier("micButton")
 
@@ -573,7 +578,7 @@ struct MicButton: View {
                 .foregroundStyle(.secondary)
         }
         if case .failed(let message) = voice.state {
-            Text(message).font(.title2).foregroundStyle(.red)
+            WarningText(text: message)
         }
     }
 }

@@ -62,6 +62,24 @@ struct DowasureApp: App {
     }
 }
 
+/// Colors with white text at a contrast ratio of 4.5:1 or more (WCAG AA), checked by calculation:
+/// orange 5.3, green 5.5, red 5.9. The system orange and green are only about 2.2 with white.
+enum Palette {
+    static let orange = Color(red: 178 / 255, green: 77 / 255, blue: 0)
+    static let green = Color(red: 0, green: 122 / 255, blue: 61 / 255)
+    static let red = Color(red: 196 / 255, green: 30 / 255, blue: 30 / 255)
+}
+
+/// Error or warning text: never color alone, always with an icon and words.
+struct WarningText: View {
+    let text: String
+    var body: some View {
+        Label(text, systemImage: "exclamationmark.triangle.fill")
+            .font(.title2)
+            .foregroundStyle(Palette.red)
+    }
+}
+
 /// Shared look: large text and large buttons for older users.
 enum Style {
     static let bigButtonHeight: CGFloat = 120
@@ -78,6 +96,7 @@ struct BigButton: View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .font(.title.bold())
+                .wrapsForLargeText()
                 .frame(maxWidth: .infinity, minHeight: Style.bigButtonHeight)
         }
         .buttonStyle(.borderedProminent)
@@ -109,6 +128,7 @@ struct ElderScreen: ViewModifier {
             } label: {
                 Label("ホームにもどる", systemImage: "house.fill")
                     .font(.title.bold())
+                    .wrapsForLargeText()
                     .frame(maxWidth: .infinity, minHeight: Style.homeButtonHeight)
             }
             .buttonStyle(.bordered)
@@ -124,4 +144,12 @@ struct ElderScreen: ViewModifier {
 
 extension View {
     func elderScreen(_ title: String) -> some View { modifier(ElderScreen(title: title)) }
+
+    /// With the largest text sizes, labels wrap onto more lines instead of being cut off with "…".
+    func wrapsForLargeText() -> some View {
+        self.lineLimit(nil)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.vertical, 8)
+    }
 }

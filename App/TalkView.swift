@@ -14,6 +14,8 @@ struct TalkView: View {
     @State private var errorMessage: String?
     @State private var voice = VoiceInput()
     @State private var started = false
+    /// Transcript before the last item, so a mistaken item can be taken back.
+    @State private var undoTranscript: String?
 
     /// UI tests run without speech output or microphone.
     private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
@@ -46,8 +48,20 @@ struct TalkView: View {
                     .accessibilityIdentifier("sendAnswer")
                 }
 
+                if undoTranscript != nil {
+                    Button {
+                        Task { await undoLast() }
+                    } label: {
+                        Label("いまのを取り消す", systemImage: "arrow.uturn.backward")
+                            .font(.title2.bold())
+                            .frame(maxWidth: .infinity, minHeight: 64)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("undoButton")
+                }
+
                 if let errorMessage {
-                    Text(errorMessage).font(.title2).foregroundStyle(.red)
+                    WarningText(text: errorMessage)
                 }
 
                 if !savedToday.isEmpty {
@@ -81,6 +95,23 @@ struct TalkView: View {
         }
     }
 
+    /// Takes back the last saved item (for mis-heard words), then refreshes the summary.
+    private func undoLast() async {
+        guard let previous = undoTranscript else { return }
+        undoTranscript = nil
+        let today = DayCalendar().key(for: Date())
+        let extraction = RecordStore.day(today, in: context)?.record?.extraction ?? .empty
+        try? RecordStore.save(DayRecord(date: today, transcript: previous, extraction: extraction), in: context)
+        savedToday = previous.split(separator: "\n").map(String.init)
+        lastConfirmation = "取り消しました。"
+        if voiceEnabled { Speaker.shared.say("取り消しました。") }
+        guard !previous.isEmpty else { return }
+        if let refreshed = try? await Recorder(client: ClaudeClient(apiKey: APIKeyStore.load())).extract(transcript: previous),
+           RecordStore.day(today, in: context)?.record?.transcript == previous {
+            try? RecordStore.save(DayRecord(date: today, transcript: previous, extraction: refreshed), in: context)
+        }
+    }
+
     private func loadToday() {
         let today = DayCalendar().key(for: Date())
         let transcript = RecordStore.day(today, in: context)?.record?.transcript ?? ""
@@ -104,6 +135,7 @@ struct TalkView: View {
             return
         }
         savedToday = transcript.split(separator: "\n").map(String.init)
+        undoTranscript = existing?.transcript ?? ""
         let confirmation = MemoLog.confirmation(for: words)
         lastConfirmation = confirmation
         if voiceEnabled {

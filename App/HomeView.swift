@@ -9,9 +9,10 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
+            // Scrolls when the user's text size is very large, so nothing is cut off.
+            ScrollView {
             VStack(spacing: 28) {
-                Spacer()
-                BigButton(title: "あれ、何だっけ？", systemImage: "questionmark.bubble", color: .orange) {
+                BigButton(title: "あれ、何だっけ？", systemImage: "questionmark.bubble", color: Palette.orange) {
                     path.append(.ask)
                 }
                 .accessibilityIdentifier("askButton")
@@ -19,16 +20,18 @@ struct HomeView: View {
                     path.append(.talk)
                 }
                 .accessibilityIdentifier("talkButton")
-                Spacer()
                 Text("このアプリは暮らしの助けです。医療や診断は行いません。")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 24)
                 Button {
                     path.append(.settings)
                 } label: {
                     Label("設定", systemImage: "gearshape.fill")
                         .font(.title2.bold())
+                        .wrapsForLargeText()
                         .frame(maxWidth: .infinity, minHeight: 64)
                 }
                 .buttonStyle(.bordered)
@@ -36,6 +39,8 @@ struct HomeView: View {
                     .accessibilityIdentifier("settingsButton")
             }
             .padding(24)
+            .padding(.top, 40)
+            }
             .navigationTitle("ど忘れ相棒")
             .navigationDestination(for: Route.self) { route in
                 switch route {
