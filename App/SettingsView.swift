@@ -60,6 +60,7 @@ struct SettingsView: View {
                         Button {
                             cloudVoiceName = item.name
                             Speaker.shared.say("今日も一日、おつかれさまでした。")
+                            Speaker.shared.prewarm()
                         } label: {
                             HStack {
                                 Text(item.label).font(.title2)
@@ -121,7 +122,10 @@ struct SettingsView: View {
                         .textContentType(.password)
                     Button("自然な声のキーを保存する") {
                         voiceKeyMessage = APIKeyStore.save(voiceKey, account: APIKeyStore.voiceAccount) ? "保存しました。" : "保存できませんでした。"
-                        if voiceKeyMessage == "保存しました。" { Speaker.shared.say("今日も一日、おつかれさまでした。") }
+                        if voiceKeyMessage == "保存しました。" {
+                            Speaker.shared.say("今日も一日、おつかれさまでした。")
+                            Speaker.shared.prewarm()
+                        }
                     }
                     if let voiceKeyMessage {
                         Text(voiceKeyMessage).foregroundStyle(voiceKeyMessage == "保存しました。" ? .green : .red)

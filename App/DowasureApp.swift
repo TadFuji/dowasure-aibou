@@ -28,12 +28,16 @@ struct DowasureApp: App {
         if let key = ProcessInfo.processInfo.environment["DOWASURE_UITEST_API_KEY"], !key.isEmpty {
             APIKeyStore.save(key)
         }
+        if let key = ProcessInfo.processInfo.environment["DOWASURE_UITEST_VOICE_KEY"], !key.isEmpty {
+            APIKeyStore.save(key, account: APIKeyStore.voiceAccount)
+        }
         #endif
     }
 
     var body: some Scene {
         WindowGroup {
             HomeView()
+                .task { Speaker.shared.prewarm() }
         }
         .modelContainer(container)
     }

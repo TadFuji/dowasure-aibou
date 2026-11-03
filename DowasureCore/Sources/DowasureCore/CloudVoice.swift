@@ -29,7 +29,7 @@ public struct CloudVoice: Sendable {
         self.transport = transport
     }
 
-    func makeRequest(text: String) throws -> URLRequest {
+    func makeRequest(text: String, stream: Bool = false) throws -> URLRequest {
         guard !apiKey.isEmpty else { throw ClaudeError.missingAPIKey }
         var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
@@ -50,9 +50,52 @@ public struct CloudVoice: Sendable {
             ]],
             "response_format": ["type": "audio"],
             "generation_config": ["speech_config": [["voice": .string(voiceName)]]],
+            "stream": .bool(stream),
         ]
         request.httpBody = try JSONEncoder().encode(body)
         return request
+    }
+
+    /// Streaming version: yields raw 16-bit PCM (24 kHz, mono) chunks as they arrive,
+    /// so playback can start about 2 seconds earlier than waiting for the whole file.
+    public func stream(_ text: String) -> AsyncThrowingStream<Data, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    var request = try makeRequest(text: text, stream: true)
+                    request.timeoutInterval = 30
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                        throw ClaudeError.http(status: http.statusCode, body: "")
+                    }
+                    for try await line in bytes.lines {
+                        if let chunk = Self.audioChunk(fromSSELine: line) {
+                            continuation.yield(chunk)
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Extracts audio bytes from one server-sent-events line such as
+    /// `data: {"index":0,"delta":{"data":"<base64>"},"event_type":"step.delta"}`.
+    static func audioChunk(fromSSELine line: String) -> Data? {
+        guard line.hasPrefix("data:") else { return nil }
+        struct Event: Decodable {
+            struct Delta: Decodable { let data: String? }
+            let event_type: String?
+            let delta: Delta?
+        }
+        let json = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+        guard let event = try? JSONDecoder().decode(Event.self, from: Data(json.utf8)),
+              event.event_type == "step.delta",
+              let b64 = event.delta?.data, let data = Data(base64Encoded: b64), !data.isEmpty else { return nil }
+        return data
     }
 
     struct ResponseBody: Decodable {

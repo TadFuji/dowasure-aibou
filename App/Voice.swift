@@ -1,4 +1,6 @@
 import AVFoundation
+import CryptoKit
+import os
 import DowasureCore
 import Speech
 import SwiftUI
@@ -213,44 +215,160 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     /// Speaks and returns when speaking has finished (or was stopped).
     func sayAndWait(_ text: String) async {
         stop()
-        generation += 1
         let mine = generation
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
 
         let cloudKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
-        var cloudPlayer: AVAudioPlayer?
         let cloudVoiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
-        let style = speed == "slow" ? "calm, kind and warm, speaking slowly and clearly" : "calm, kind and warm"
-        if !cloudKey.isEmpty,
-           let audio = try? await CloudVoice(apiKey: cloudKey, voiceName: cloudVoiceName, style: style).synthesize(text) {
-            cloudPlayer = try? AVAudioPlayer(data: audio)
+        let style = Self.style(for: speed)
+        if !cloudKey.isEmpty {
+            let voice = CloudVoice(apiKey: cloudKey, voiceName: cloudVoiceName, style: style)
+            let cacheFile = Self.cacheURL(text: text, voice: cloudVoiceName, style: style)
+            if let cached = cacheFile.flatMap({ try? Data(contentsOf: $0) }), let player = try? AVAudioPlayer(data: cached) {
+                // Fixed phrase already on the iPhone: plays at once.
+                player.delegate = self
+                self.player = player
+                player.play()
+                await withCheckedContinuation { finished = $0 }
+                return
+            }
+            if cacheFile == nil, await playStream(voice.stream(text), generation: mine) {
+                return
+            }
+            if mine != generation { return }
+            if let audio = try? await voice.synthesize(text), mine == generation, let player = try? AVAudioPlayer(data: audio) {
+                if let cacheFile { try? audio.write(to: cacheFile) }
+                player.delegate = self
+                self.player = player
+                player.play()
+                await withCheckedContinuation { finished = $0 }
+                return
+            }
         }
         guard mine == generation else { return }
-        if let player = cloudPlayer {
-            player.delegate = self
-            self.player = player
-            player.play()
-        } else {
-            let utterance = AVSpeechUtterance(string: text)
-            utterance.voice = voice
-            // A slight slowdown keeps the voice natural; slowing more makes it sound mechanical.
-            utterance.rate = speed == "slow" ? AVSpeechUtteranceDefaultSpeechRate * 0.9 : AVSpeechUtteranceDefaultSpeechRate
-            utterance.postUtteranceDelay = 0.2
-            synthesizer.speak(utterance)
-        }
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = voice
+        // A slight slowdown keeps the voice natural; slowing more makes it sound mechanical.
+        utterance.rate = speed == "slow" ? AVSpeechUtteranceDefaultSpeechRate * 0.9 : AVSpeechUtteranceDefaultSpeechRate
+        utterance.postUtteranceDelay = 0.2
+        synthesizer.speak(utterance)
         await withCheckedContinuation { finished = $0 }
+    }
+
+    // MARK: Streaming playback (starts speaking while the rest of the audio is still arriving)
+
+    private let engine = AVAudioEngine()
+    private let streamNode = AVAudioPlayerNode()
+    private let pcmFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24_000, channels: 1, interleaved: false)!
+    private var engineReady = false
+
+    /// Plays streamed PCM chunks. Returns false (so the caller can fall back) if no audio arrived.
+    private func playStream(_ chunks: AsyncThrowingStream<Data, Error>, generation mine: Int) async -> Bool {
+        if !engineReady {
+            engine.attach(streamNode)
+            engine.connect(streamNode, to: engine.mainMixerNode, format: pcmFormat)
+            engineReady = true
+        }
+        do { try engine.start() } catch { return false }
+        var leftover = Data()
+        var scheduled = 0
+        let streamStart = Date()
+        do {
+            for try await chunk in chunks {
+                guard mine == generation else { return true }
+                var bytes = leftover + chunk
+                if bytes.count % 2 == 1 { leftover = bytes.suffix(1); bytes = bytes.dropLast() } else { leftover = Data() }
+                guard let buffer = Self.makeBuffer(pcm16: bytes, format: pcmFormat) else { continue }
+                Self.enqueue(buffer, on: streamNode)
+                scheduled += 1
+                if scheduled == 1 {
+                    streamNode.play()
+                    Logger(subsystem: "io.github.tadfuji.dowasure", category: "voice")
+                        .info("stream first audio after \(Date().timeIntervalSince(streamStart), format: .fixed(precision: 2), privacy: .public)s")
+                }
+            }
+        } catch {
+            if scheduled == 0 { return false }
+        }
+        guard scheduled > 0, mine == generation else { return scheduled > 0 }
+        // An empty buffer at the end tells us when everything before it has been played.
+        if let end = AVAudioPCMBuffer(pcmFormat: pcmFormat, frameCapacity: 1) {
+            end.frameLength = 1
+            await withCheckedContinuation { continuation in
+                finished = continuation
+                Self.schedule(end, on: streamNode) { Task { @MainActor in Speaker.shared.resumeWaiter() } }
+            }
+        }
+        return true
+    }
+
+    nonisolated private static func enqueue(_ buffer: AVAudioPCMBuffer, on node: AVAudioPlayerNode) {
+        node.scheduleBuffer(buffer, completionHandler: nil)
+    }
+
+    nonisolated private static func schedule(_ buffer: AVAudioPCMBuffer, on node: AVAudioPlayerNode,
+                                             done: @escaping @Sendable () -> Void) {
+        node.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { _ in done() }
+    }
+
+    nonisolated private static func makeBuffer(pcm16 data: Data, format: AVAudioFormat) -> AVAudioPCMBuffer? {
+        let frames = data.count / 2
+        guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)),
+              let out = buffer.floatChannelData?[0] else { return nil }
+        buffer.frameLength = AVAudioFrameCount(frames)
+        data.withUnsafeBytes { raw in
+            let samples = raw.bindMemory(to: Int16.self)
+            for i in 0..<frames { out[i] = Float(Int16(littleEndian: samples[i])) / 32768 }
+        }
+        return buffer
+    }
+
+    /// Sentences the app always says. Their audio is kept on the iPhone so they play without waiting.
+    nonisolated static let fixedPhrases = [Interviewer.firstQuestion, Interviewer.closing, "今日も一日、おつかれさまでした。"] + acknowledgements
+
+    /// Short replies said the moment the user finishes, while the AI prepares its next question.
+    nonisolated static let acknowledgements = ["はい。", "なるほど。", "そうでしたか。"]
+
+    nonisolated private static func style(for speed: String) -> String {
+        speed == "slow" ? "calm, kind and warm, speaking slowly and clearly" : "calm, kind and warm"
+    }
+
+    /// Only fixed phrases are cached; answers that contain the user's records are not written to disk.
+    nonisolated private static func cacheURL(text: String, voice: String, style: String) -> URL? {
+        guard fixedPhrases.contains(text),
+              let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
+        let digest = SHA256.hash(data: Data("\(voice)|\(style)|\(text)".utf8)).map { String(format: "%02x", $0) }.joined()
+        return dir.appendingPathComponent("voice-\(digest).wav")
+    }
+
+    /// Prepares the fixed phrases in the background (called at launch and when the voice changes).
+    func prewarm() {
+        let key = APIKeyStore.load(account: APIKeyStore.voiceAccount)
+        guard !key.isEmpty else { return }
+        let voiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
+        let style = Self.style(for: speed)
+        Task.detached {
+            for phrase in Self.fixedPhrases {
+                guard let url = Self.cacheURL(text: phrase, voice: voiceName, style: style),
+                      !FileManager.default.fileExists(atPath: url.path) else { continue }
+                if let audio = try? await CloudVoice(apiKey: key, voiceName: voiceName, style: style).synthesize(phrase) {
+                    try? audio.write(to: url)
+                }
+            }
+        }
     }
 
     func stop() {
         generation += 1
         synthesizer.stopSpeaking(at: .immediate)
+        if engineReady { streamNode.stop() }
         player?.stop()
         player = nil
         resumeWaiter()
     }
 
-    private func resumeWaiter() {
+    fileprivate func resumeWaiter() {
         finished?.resume()
         finished = nil
     }

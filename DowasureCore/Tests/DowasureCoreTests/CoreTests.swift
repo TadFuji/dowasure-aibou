@@ -252,3 +252,16 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         }
     }
 }
+
+@Suite struct CloudVoiceStreamTests {
+    @Test func parsesAudioDeltaLines() {
+        let b64 = Data([1, 2, 3, 4]).base64EncodedString()
+        #expect(CloudVoice.audioChunk(fromSSELine: #"data: {"index":0,"delta":{"data":"\#(b64)"},"event_type":"step.delta"}"#) == Data([1, 2, 3, 4]))
+    }
+
+    @Test func ignoresOtherLines() {
+        #expect(CloudVoice.audioChunk(fromSSELine: "event: step.delta") == nil)
+        #expect(CloudVoice.audioChunk(fromSSELine: #"data: {"event_type":"interaction.created"}"#) == nil)
+        #expect(CloudVoice.audioChunk(fromSSELine: "") == nil)
+    }
+}

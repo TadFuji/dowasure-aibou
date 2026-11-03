@@ -115,6 +115,14 @@ if CommandLine.arguments.contains("--voice-demo") {
         try audio.write(to: file)
         print("\(voice.name) (\(voice.label)): \(audio.count) bytes, \(String(format: "%.1f", Date().timeIntervalSince(start)))s -> \(file.lastPathComponent)")
     }
+    let streamStart = Date()
+    var firstChunk: TimeInterval?
+    var streamed = 0
+    for try await chunk in CloudVoice(apiKey: key).stream("今日は、どなたかと会ったり、話したりしましたか？") {
+        if firstChunk == nil { firstChunk = Date().timeIntervalSince(streamStart) }
+        streamed += chunk.count
+    }
+    print(String(format: "stream: first audio %.1fs, total %.1fs, %d bytes PCM", firstChunk ?? -1, Date().timeIntervalSince(streamStart), streamed))
     exit(0)
 }
 

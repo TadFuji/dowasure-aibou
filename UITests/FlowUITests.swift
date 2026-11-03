@@ -105,6 +105,13 @@ final class FlowUITests: XCTestCase {
         }
     }
 
+    private func localSecret(_ name: String) -> String {
+        let file = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("secrets/\(name)")
+        return (try? String(contentsOf: file, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
     private func liveKey() throws -> String {
         let keyFile = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
@@ -127,6 +134,8 @@ final class FlowUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-uitest-reset-records", "-uitest-no-voice", "-uitest-load-samples"]
         app.launchEnvironment["DOWASURE_UITEST_API_KEY"] = key
+        // Also exercise the natural cloud voice (streaming) when its key is available locally.
+        app.launchEnvironment["DOWASURE_UITEST_VOICE_KEY"] = localSecret("gemini_api_key")
         app.launch()
 
         app.buttons["askButton"].tap()

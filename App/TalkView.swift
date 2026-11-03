@@ -120,8 +120,11 @@ struct TalkView: View {
         errorMessage = nil
         turns.append(InterviewTurn(.user, answer))
         phase = .thinking
+        // Reply at once with a short acknowledgement so there is no silence while the AI thinks.
+        let ack = voiceEnabled ? Task { await Speaker.shared.sayAndWait(Speaker.acknowledgements.randomElement()!) } : nil
         do {
             let step = try await Interviewer(client: ClaudeClient(apiKey: APIKeyStore.load())).next(after: turns)
+            await ack?.value
             if step.done {
                 await finish(say: step.say)
             } else {
@@ -129,6 +132,7 @@ struct TalkView: View {
                 await speakThenListen(step.say)
             }
         } catch {
+            await ack?.value
             errorMessage = error.localizedDescription
             phase = .listening
         }
