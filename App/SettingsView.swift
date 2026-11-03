@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var voiceKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
     @State private var voiceKeyMessage: String?
     @AppStorage(Speaker.cloudVoiceKey) private var cloudVoiceName = CloudVoice.defaultVoiceName
+    @AppStorage(Speaker.voiceModeKey) private var voiceMode = "auto"
     private var hasCloudVoiceKey: Bool { !voiceKey.isEmpty && voiceKeyMessage != "保存できませんでした。" }
     @AppStorage("speechSpeed") private var speechSpeed = "slow"
     @AppStorage(Speaker.voiceKey) private var voiceIdentifier = ""
@@ -56,6 +57,15 @@ struct SettingsView: View {
 
             Section {
                 if hasCloudVoiceKey {
+                    Picker("声の種類", selection: $voiceMode) {
+                        Text("自動").tag("auto")
+                        Text("iPhone（速い）").tag("device")
+                        Text("Gemini（自然）").tag("cloud")
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: voiceMode) { _, _ in Speaker.shared.say("今日も一日、おつかれさまでした。") }
+                }
+                if hasCloudVoiceKey && Speaker.shared.usesCloudVoice {
                     ForEach(CloudVoice.voices, id: \.name) { item in
                         Button {
                             cloudVoiceName = item.name
@@ -98,7 +108,9 @@ struct SettingsView: View {
                     Text("ふつう").tag("normal")
                 }
                 .pickerStyle(.segmented)
-                Text("押すと、その声で読み上げます。")
+                Text(Speaker.hasHighQualityDeviceVoice
+                     ? "押すと、その声で読み上げます。「自動」では、待たずに話せる iPhone の高品質な声を使います。"
+                     : "押すと、その声で読み上げます。iPhone の高品質な声を入れると、待たずに話せるようになります（「設定」→「アクセシビリティ」→「読み上げコンテンツ」→「声」→「日本語」）。")
                     .font(.body).foregroundStyle(.secondary)
             } header: {
                 Text("声").font(.title3.bold())

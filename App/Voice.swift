@@ -205,7 +205,23 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         return Self.japaneseVoices.first ?? AVSpeechSynthesisVoice(language: "ja-JP")
     }
 
-    var usesCloudVoice: Bool { !APIKeyStore.load(account: APIKeyStore.voiceAccount).isEmpty }
+    static let voiceModeKey = "voiceMode"
+
+    /// True when a high-quality Japanese voice has been downloaded on this iPhone (speaks with no delay).
+    static var hasHighQualityDeviceVoice: Bool {
+        japaneseVoices.contains { $0.quality == .enhanced || $0.quality == .premium }
+    }
+
+    /// Which voice to use: "device" (iPhone, no delay) or "cloud" (Gemini, most natural).
+    /// Unless the user chose, a downloaded high-quality iPhone voice wins because it has no delay.
+    var usesCloudVoice: Bool {
+        guard !APIKeyStore.load(account: APIKeyStore.voiceAccount).isEmpty else { return false }
+        switch UserDefaults.standard.string(forKey: Self.voiceModeKey) {
+        case "cloud": return true
+        case "device": return false
+        default: return !Self.hasHighQualityDeviceVoice
+        }
+    }
 
     /// Starts speaking without waiting.
     func say(_ text: String) {
@@ -219,7 +235,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
 
-        let cloudKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
+        let cloudKey = usesCloudVoice ? APIKeyStore.load(account: APIKeyStore.voiceAccount) : ""
         let cloudVoiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
         let style = Self.style(for: speed)
         if !cloudKey.isEmpty {
