@@ -124,6 +124,8 @@ struct TalkView: View {
         let ack = voiceEnabled ? Task { await Speaker.shared.sayAndWait(Speaker.acknowledgements.randomElement()!) } : nil
         do {
             let step = try await Interviewer(client: ClaudeClient(apiKey: APIKeyStore.load())).next(after: turns)
+            // Fetch the next question's voice while the acknowledgement is still playing.
+            if voiceEnabled && !step.done { Speaker.shared.prepare(step.say) }
             await ack?.value
             if step.done {
                 await finish(say: step.say)

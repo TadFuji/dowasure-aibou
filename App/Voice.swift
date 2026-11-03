@@ -245,7 +245,10 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 await withCheckedContinuation { finished = $0 }
                 return
             }
-            if cacheFile == nil, await playStream(voice.stream(text), generation: mine) {
+            let stream = (preparedText == text ? preparedStream : nil) ?? voice.stream(text)
+            preparedText = nil
+            preparedStream = nil
+            if cacheFile == nil, await playStream(stream, generation: mine) {
                 return
             }
             if mine != generation { return }
@@ -266,6 +269,19 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         utterance.postUtteranceDelay = 0.2
         synthesizer.speak(utterance)
         await withCheckedContinuation { finished = $0 }
+    }
+
+    private var preparedText: String?
+    private var preparedStream: AsyncThrowingStream<Data, Error>?
+
+    /// Starts fetching the voice for a sentence that will be said next (e.g. while an
+    /// acknowledgement is still playing), so it can start as soon as the current one ends.
+    func prepare(_ text: String) {
+        guard usesCloudVoice, !Self.fixedPhrases.contains(text) else { return }
+        let key = APIKeyStore.load(account: APIKeyStore.voiceAccount)
+        let voiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
+        preparedText = text
+        preparedStream = CloudVoice(apiKey: key, voiceName: voiceName, style: Self.style(for: speed)).stream(text)
     }
 
     // MARK: Streaming playback (starts speaking while the rest of the audio is still arriving)
@@ -340,7 +356,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     nonisolated static let fixedPhrases = [Interviewer.firstQuestion, Interviewer.closing, "今日も一日、おつかれさまでした。"] + acknowledgements
 
     /// Short replies said the moment the user finishes, while the AI prepares its next question.
-    nonisolated static let acknowledgements = ["はい。", "なるほど。", "そうでしたか。"]
+    /// About two seconds each, long enough to cover most of the wait for the AI's next question.
+    nonisolated static let acknowledgements = ["はい、ありがとうございます。", "なるほど、そうでしたか。", "そうなんですね、ありがとうございます。"]
 
     nonisolated private static func style(for speed: String) -> String {
         speed == "slow" ? "calm, kind and warm, speaking slowly and clearly" : "calm, kind and warm"
