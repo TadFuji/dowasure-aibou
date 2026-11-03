@@ -243,14 +243,12 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 // Fixed phrase already on the iPhone: plays at once.
                 player.delegate = self
                 self.player = player
+                stopWaitingTone()
                 player.play()
                 await withCheckedContinuation { finished = $0; waiterGeneration = generation }
                 return
             }
-            let stream = (preparedText == text ? preparedStream : nil) ?? voice.stream(text)
-            preparedText = nil
-            preparedStream = nil
-            if cacheFile == nil, await playStream(stream, generation: mine) {
+            if cacheFile == nil, await playStream(voice.stream(text), generation: mine) {
                 return
             }
             if mine != generation { return }
@@ -258,6 +256,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 if let cacheFile { try? audio.write(to: cacheFile) }
                 player.delegate = self
                 self.player = player
+                stopWaitingTone()
                 player.play()
                 await withCheckedContinuation { finished = $0; waiterGeneration = generation }
                 return
@@ -270,21 +269,68 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         utterance.rate = speed == "slow" ? AVSpeechUtteranceDefaultSpeechRate * 0.9 : AVSpeechUtteranceDefaultSpeechRate
         utterance.postUtteranceDelay = 0.2
         currentUtterance = ObjectIdentifier(utterance)
+        stopWaitingTone()
         synthesizer.speak(utterance)
         await withCheckedContinuation { finished = $0; waiterGeneration = generation }
     }
 
-    private var preparedText: String?
-    private var preparedStream: AsyncThrowingStream<Data, Error>?
+    // MARK: Waiting tone ("pon pon pon") while the AI thinks and the voice is prepared
 
-    /// Starts fetching the voice for a sentence that will be said next (e.g. while an
-    /// acknowledgement is still playing), so it can start as soon as the current one ends.
-    func prepare(_ text: String) {
-        guard usesCloudVoice, !Self.fixedPhrases.contains(text) else { return }
-        let key = APIKeyStore.load(account: APIKeyStore.voiceAccount)
-        let voiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
-        preparedText = text
-        preparedStream = CloudVoice(apiKey: key, voiceName: voiceName, style: Self.style(for: speed)).stream(text)
+    private let toneNode = AVAudioPlayerNode()
+    private var toneOn = false
+
+    /// Starts a soft, repeating three-beep tone. It stops by itself when the next voice starts.
+    func startWaitingTone() {
+        guard !toneOn else { return }
+        prepareEngine()
+        guard let pattern = Self.tonePattern(format: pcmFormat) else { return }
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        do { try engine.start() } catch { return }
+        Self.loop(pattern, on: toneNode)
+        toneNode.play()
+        toneOn = true
+    }
+
+    func stopWaitingTone() {
+        guard toneOn else { return }
+        toneNode.stop()
+        toneOn = false
+    }
+
+    private func prepareEngine() {
+        guard !engineReady else { return }
+        engine.attach(streamNode)
+        engine.attach(toneNode)
+        engine.connect(streamNode, to: engine.mainMixerNode, format: pcmFormat)
+        engine.connect(toneNode, to: engine.mainMixerNode, format: pcmFormat)
+        engineReady = true
+    }
+
+    nonisolated private static func loop(_ buffer: AVAudioPCMBuffer, on node: AVAudioPlayerNode) {
+        node.scheduleBuffer(buffer, at: nil, options: .loops, completionHandler: nil)
+    }
+
+    /// Three short soft beeps (pon pon pon) followed by a pause, generated in code (no sound files).
+    nonisolated static func tonePattern(format: AVAudioFormat) -> AVAudioPCMBuffer? {
+        let rate = format.sampleRate
+        let beep = 0.09, gap = 0.16, pause = 0.7
+        let total = Int(rate * (3 * (beep + gap) + pause))
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(total)),
+              let out = buffer.floatChannelData?[0] else { return nil }
+        buffer.frameLength = AVAudioFrameCount(total)
+        for i in 0..<total { out[i] = 0 }
+        let beepFrames = Int(rate * beep)
+        for n in 0..<3 {
+            let start = Int(rate * Double(n) * (beep + gap))
+            for i in 0..<beepFrames {
+                let t = Double(i) / rate
+                // Soft attack and decay so it sounds like "pon" rather than a sharp beep.
+                let envelope = sin(Double.pi * Double(i) / Double(beepFrames))
+                out[start + i] = Float(0.12 * envelope * sin(2 * Double.pi * 784 * t))
+            }
+        }
+        return buffer
     }
 
     // MARK: Streaming playback (starts speaking while the rest of the audio is still arriving)
@@ -296,11 +342,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
     /// Plays streamed PCM chunks. Returns false (so the caller can fall back) if no audio arrived.
     private func playStream(_ chunks: AsyncThrowingStream<Data, Error>, generation mine: Int) async -> Bool {
-        if !engineReady {
-            engine.attach(streamNode)
-            engine.connect(streamNode, to: engine.mainMixerNode, format: pcmFormat)
-            engineReady = true
-        }
+        prepareEngine()
         do { try engine.start() } catch { return false }
         var leftover = Data()
         var scheduled = 0
@@ -314,6 +356,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 Self.enqueue(buffer, on: streamNode)
                 scheduled += 1
                 if scheduled == 1 {
+                    stopWaitingTone()
                     streamNode.play()
                     Logger(subsystem: "io.github.tadfuji.dowasure", category: "voice")
                         .info("stream first audio after \(Date().timeIntervalSince(streamStart), format: .fixed(precision: 2), privacy: .public)s")
@@ -358,11 +401,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 
     /// Sentences the app always says. Their audio is kept on the iPhone so they play without waiting.
-    nonisolated static let fixedPhrases = [Interviewer.firstQuestion, Interviewer.closing, "今日も一日、おつかれさまでした。"] + acknowledgements
-
-    /// Short replies said the moment the user finishes, while the AI prepares its next question.
-    /// About two seconds each, long enough to cover most of the wait for the AI's next question.
-    nonisolated static let acknowledgements = ["はい、ありがとうございます。", "なるほど、そうでしたか。", "そうなんですね、ありがとうございます。"]
+    nonisolated static let fixedPhrases = [Interviewer.firstQuestion, Interviewer.closing, "今日も一日、おつかれさまでした。"]
 
     nonisolated private static func style(for speed: String) -> String {
         speed == "slow" ? "calm, kind and warm, speaking slowly and clearly" : "calm, kind and warm"

@@ -54,11 +54,13 @@ struct AskView: View {
         result = nil
         defer { isWorking = false }
         do {
+            Speaker.shared.startWaitingTone()
             let answerer = Answerer(client: ClaudeClient(apiKey: APIKeyStore.load()))
             let answer = try await answerer.answer(question, records: RecordStore.allRecords(context))
             result = answer
             Speaker.shared.say(answer.displayText)
         } catch {
+            Speaker.shared.stopWaitingTone()
             errorMessage = error.localizedDescription
         }
     }

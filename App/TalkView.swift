@@ -120,13 +120,10 @@ struct TalkView: View {
         errorMessage = nil
         turns.append(InterviewTurn(.user, answer))
         phase = .thinking
-        // Reply at once with a short acknowledgement so there is no silence while the AI thinks.
-        let ack = voiceEnabled ? Task { await Speaker.shared.sayAndWait(Speaker.acknowledgements.randomElement()!) } : nil
+        // A soft "pon pon pon" tone fills the wait while the AI thinks; it stops when the next voice starts.
+        if voiceEnabled { Speaker.shared.startWaitingTone() }
         do {
             let step = try await Interviewer(client: ClaudeClient(apiKey: APIKeyStore.load())).next(after: turns)
-            // Fetch the next question's voice while the acknowledgement is still playing.
-            if voiceEnabled && !step.done { Speaker.shared.prepare(step.say) }
-            await ack?.value
             if step.done {
                 await finish(say: step.say)
             } else {
@@ -134,7 +131,7 @@ struct TalkView: View {
                 await speakThenListen(step.say)
             }
         } catch {
-            await ack?.value
+            Speaker.shared.stopWaitingTone()
             errorMessage = error.localizedDescription
             phase = .listening
         }
