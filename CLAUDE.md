@@ -4,6 +4,8 @@
 
 ## 守ること
 
+- 変更・問題・原因・対応・結果は `docs/開発記録.md` に時系列で必ず追記する（藤川さんの常設依頼。最終レポートの材料）。
+
 - このリポジトリは公開する。API キー・藤川さんの本物の記録・他人の実名を入れない。デモ用データは `SampleData.swift` の架空データだけ。`.githooks/pre-commit` が `sk-ant-` と `private-data/` をはじく（`git config core.hooksPath .githooks` が前提）。
 - 医療・診断めいた機能や文言を入れない。
 - Managed Agents は使わない（記録を端末外に保存しないため）。
