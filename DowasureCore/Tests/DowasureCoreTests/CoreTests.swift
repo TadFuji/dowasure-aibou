@@ -211,3 +211,32 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         #expect(VoiceTiming.silenceTimeout(heardSomething: true) < VoiceTiming.silenceTimeout(heardSomething: false))
     }
 }
+
+@Suite struct CloudVoiceTests {
+    @Test func requestCarriesTextVoiceAndKey() async throws {
+        let audio = Data("mp3".utf8).base64EncodedString()
+        let fake = FakeTransport(body: #"{"audioContent":"\#(audio)"}"#)
+        let data = try await CloudVoice(apiKey: "g-key", transport: fake).synthesize("こんばんは")
+        #expect(data == Data("mp3".utf8))
+        let req = try #require(fake.lastRequest)
+        #expect(req.url?.query == "key=g-key")
+        let json = try JSONSerialization.jsonObject(with: req.httpBody!) as! [String: Any]
+        #expect((json["input"] as! [String: Any])["text"] as? String == "こんばんは")
+        #expect((json["voice"] as! [String: Any])["languageCode"] as? String == "ja-JP")
+    }
+
+    @Test func missingKeyFailsWithoutNetwork() async {
+        let fake = FakeTransport(body: "")
+        await #expect(throws: ClaudeError.missingAPIKey) {
+            _ = try await CloudVoice(apiKey: "", transport: fake).synthesize("x")
+        }
+        #expect(fake.lastRequest == nil)
+    }
+
+    @Test func httpErrorIsReported() async {
+        let fake = FakeTransport(status: 403, body: "{}")
+        await #expect(throws: ClaudeError.http(status: 403, body: "{}")) {
+            _ = try await CloudVoice(apiKey: "k", transport: fake).synthesize("x")
+        }
+    }
+}

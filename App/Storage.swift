@@ -57,7 +57,10 @@ enum APIKeyStore {
     private static let service = "io.github.tadfuji.dowasure.anthropic"
     private static let account = "api-key"
 
-    static func load() -> String {
+    /// Account name for the Google Cloud Text-to-Speech key (natural voice).
+    static let voiceAccount = "google-tts-key"
+
+    static func load(account: String = account) -> String {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -72,7 +75,7 @@ enum APIKeyStore {
     }
 
     @discardableResult
-    static func save(_ key: String) -> Bool {
+    static func save(_ key: String, account: String = account) -> Bool {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

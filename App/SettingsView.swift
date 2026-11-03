@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var message: String?
     @State private var confirmDelete = false
     @State private var showSetup = false
+    @State private var voiceKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
+    @State private var voiceKeyMessage: String?
     @AppStorage("speechSpeed") private var speechSpeed = "slow"
     @AppStorage(Speaker.voiceKey) private var voiceIdentifier = ""
     @AppStorage(EveningReminder.enabledKey) private var reminderEnabled = false
@@ -94,6 +96,15 @@ struct SettingsView: View {
                         Label(keyMessage, systemImage: keyMessage == "保存しました。" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(keyMessage == "保存しました。" ? .green : .red)
                             .accessibilityIdentifier("keyMessage")
+                    }
+                    SecureField("自然な声のキー（Google）", text: $voiceKey)
+                        .textContentType(.password)
+                    Button("自然な声のキーを保存する") {
+                        voiceKeyMessage = APIKeyStore.save(voiceKey, account: APIKeyStore.voiceAccount) ? "保存しました。" : "保存できませんでした。"
+                        if voiceKeyMessage == "保存しました。" { Speaker.shared.say("今日も一日、おつかれさまでした。") }
+                    }
+                    if let voiceKeyMessage {
+                        Text(voiceKeyMessage).foregroundStyle(voiceKeyMessage == "保存しました。" ? .green : .red)
                     }
                     Button("架空の記録を入れる") { loadSamples() }
                         .accessibilityIdentifier("loadSamples")

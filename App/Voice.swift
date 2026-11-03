@@ -155,12 +155,15 @@ final class VoiceInput {
     }
 }
 
-/// Reads text aloud in Japanese.
+/// Reads text aloud in Japanese. Uses the natural cloud voice when its key is set,
+/// and the built-in iPhone voice otherwise (or when the cloud request fails).
 @MainActor
-final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
+final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
     static let shared = Speaker()
     private let synthesizer = AVSpeechSynthesizer()
+    private var player: AVAudioPlayer?
     private var finished: CheckedContinuation<Void, Never>?
+    private var generation = 0
 
     override init() {
         super.init()
@@ -172,14 +175,13 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
 
     static let voiceKey = "voiceIdentifier"
 
-    /// Regular Japanese voices installed on this iPhone, most natural first (premium, enhanced, compact).
+    /// Regular Japanese voices installed on this iPhone, female first, then most natural.
     /// Only Apple's standard voices ("com.apple.voice.*") are offered: the character voices
     /// ("com.apple.eloquence.*" such as Eddy or Grandpa) sound deliberately mechanical and scared the user.
     static var japaneseVoices: [AVSpeechSynthesisVoice] {
         AVSpeechSynthesisVoice.speechVoices()
             .filter { isRegularJapanese($0.identifier) && $0.language == "ja-JP" }
             .sorted { a, b in
-                // A gentle female voice is the default the user asked for; then the more natural quality.
                 let af = a.gender == .female, bf = b.gender == .female
                 if af != bf { return af }
                 if a.quality.rawValue != b.quality.rawValue { return a.quality.rawValue > b.quality.rawValue }
@@ -191,7 +193,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
         identifier.hasPrefix("com.apple.voice.") && !identifier.contains("super-compact")
     }
 
-    /// The voice chosen in settings, or the most natural regular voice, or the system default.
+    /// The built-in voice chosen in settings, or the most suitable regular voice.
     var voice: AVSpeechSynthesisVoice? {
         if let id = UserDefaults.standard.string(forKey: Self.voiceKey), Self.isRegularJapanese(id),
            let chosen = AVSpeechSynthesisVoice(identifier: id) {
@@ -200,25 +202,49 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
         return Self.japaneseVoices.first ?? AVSpeechSynthesisVoice(language: "ja-JP")
     }
 
+    var usesCloudVoice: Bool { !APIKeyStore.load(account: APIKeyStore.voiceAccount).isEmpty }
+
+    /// Starts speaking without waiting.
     func say(_ text: String) {
-        stop()
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = voice
-        // A slight slowdown keeps the voice natural; slowing more makes it sound mechanical.
-        utterance.rate = speed == "slow" ? AVSpeechUtteranceDefaultSpeechRate * 0.9 : AVSpeechUtteranceDefaultSpeechRate
-        utterance.postUtteranceDelay = 0.2
-        synthesizer.speak(utterance)
+        Task { await sayAndWait(text) }
     }
 
     /// Speaks and returns when speaking has finished (or was stopped).
     func sayAndWait(_ text: String) async {
-        say(text)
+        stop()
+        generation += 1
+        let mine = generation
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+        try? AVAudioSession.sharedInstance().setActive(true)
+
+        let cloudKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
+        var cloudPlayer: AVAudioPlayer?
+        if !cloudKey.isEmpty, let audio = try? await CloudVoice(apiKey: cloudKey).synthesize(text) {
+            cloudPlayer = try? AVAudioPlayer(data: audio)
+        }
+        guard mine == generation else { return }
+        if let player = cloudPlayer {
+            player.delegate = self
+            player.rate = speed == "slow" ? 0.92 : 1.0
+            player.enableRate = true
+            self.player = player
+            player.play()
+        } else {
+            let utterance = AVSpeechUtterance(string: text)
+            utterance.voice = voice
+            // A slight slowdown keeps the voice natural; slowing more makes it sound mechanical.
+            utterance.rate = speed == "slow" ? AVSpeechUtteranceDefaultSpeechRate * 0.9 : AVSpeechUtteranceDefaultSpeechRate
+            utterance.postUtteranceDelay = 0.2
+            synthesizer.speak(utterance)
+        }
         await withCheckedContinuation { finished = $0 }
     }
 
     func stop() {
+        generation += 1
         synthesizer.stopSpeaking(at: .immediate)
+        player?.stop()
+        player = nil
         resumeWaiter()
     }
 
@@ -233,6 +259,10 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.resumeWaiter() }
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in self.resumeWaiter() }
     }
 }
