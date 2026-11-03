@@ -318,6 +318,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     // MARK: Waiting tone ("pon pon pon") while the AI thinks and the voice is prepared
 
     private let toneNode = AVAudioPlayerNode()
+    private let toneReverb = AVAudioUnitReverb()
+    private let toneEcho = AVAudioUnitDelay()
     private var toneOn = false
 
     /// Starts a soft, repeating three-beep tone. It stops by itself when the next voice starts.
@@ -343,8 +345,19 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         guard !engineReady else { return }
         engine.attach(streamNode)
         engine.attach(toneNode)
+        engine.attach(toneEcho)
+        engine.attach(toneReverb)
+        // Tone → soft echo → hall reverb, for a gentle, roomy sound rather than a bare electronic beep.
+        toneEcho.delayTime = 0.32
+        toneEcho.feedback = 25
+        toneEcho.lowPassCutoff = 3000
+        toneEcho.wetDryMix = 25
+        toneReverb.loadFactoryPreset(.largeHall)
+        toneReverb.wetDryMix = 45
         engine.connect(streamNode, to: engine.mainMixerNode, format: pcmFormat)
-        engine.connect(toneNode, to: engine.mainMixerNode, format: pcmFormat)
+        engine.connect(toneNode, to: toneEcho, format: pcmFormat)
+        engine.connect(toneEcho, to: toneReverb, format: pcmFormat)
+        engine.connect(toneReverb, to: engine.mainMixerNode, format: pcmFormat)
         engineReady = true
     }
 
@@ -352,23 +365,27 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         node.scheduleBuffer(buffer, at: nil, options: .loops, completionHandler: nil)
     }
 
-    /// Three short soft beeps (pon pon pon) followed by a pause, generated in code (no sound files).
+    /// Three soft, bell-like "pon" notes followed by a pause, generated in code (no sound files).
+    /// Each note has a quick soft attack and a long fading tail, with a quiet overtone, like a small marimba.
     nonisolated static func tonePattern(format: AVAudioFormat) -> AVAudioPCMBuffer? {
         let rate = format.sampleRate
-        let beep = 0.09, gap = 0.16, pause = 0.7
-        let total = Int(rate * (3 * (beep + gap) + pause))
+        let spacing = 0.30, noteLength = 0.55, pause = 1.0
+        let total = Int(rate * (2 * spacing + noteLength + pause))
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(total)),
               let out = buffer.floatChannelData?[0] else { return nil }
         buffer.frameLength = AVAudioFrameCount(total)
         for i in 0..<total { out[i] = 0 }
-        let beepFrames = Int(rate * beep)
+        let noteFrames = Int(rate * noteLength)
+        let attackFrames = Int(rate * 0.012)
+        let frequency = 659.25 // E5: soft and clear without being shrill
         for n in 0..<3 {
-            let start = Int(rate * Double(n) * (beep + gap))
-            for i in 0..<beepFrames {
+            let start = Int(rate * Double(n) * spacing)
+            for i in 0..<noteFrames where start + i < total {
                 let t = Double(i) / rate
-                // Soft attack and decay so it sounds like "pon" rather than a sharp beep.
-                let envelope = sin(Double.pi * Double(i) / Double(beepFrames))
-                out[start + i] = Float(0.12 * envelope * sin(2 * Double.pi * 784 * t))
+                let attack = i < attackFrames ? Double(i) / Double(attackFrames) : 1
+                let decay = exp(-t * 7)
+                let tone = sin(2 * .pi * frequency * t) + 0.25 * sin(2 * .pi * frequency * 2 * t) * exp(-t * 12)
+                out[start + i] += Float(0.09 * attack * decay * tone)
             }
         }
         return buffer
