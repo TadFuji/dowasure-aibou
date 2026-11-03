@@ -165,6 +165,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     private let synthesizer = AVSpeechSynthesizer()
     private var player: AVAudioPlayer?
     private var finished: CheckedContinuation<Void, Never>?
+    private var waiterGeneration = -1
+    private var currentUtterance: ObjectIdentifier?
     private var generation = 0
 
     override init() {
@@ -242,7 +244,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 player.delegate = self
                 self.player = player
                 player.play()
-                await withCheckedContinuation { finished = $0 }
+                await withCheckedContinuation { finished = $0; waiterGeneration = generation }
                 return
             }
             let stream = (preparedText == text ? preparedStream : nil) ?? voice.stream(text)
@@ -257,7 +259,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 player.delegate = self
                 self.player = player
                 player.play()
-                await withCheckedContinuation { finished = $0 }
+                await withCheckedContinuation { finished = $0; waiterGeneration = generation }
                 return
             }
         }
@@ -267,8 +269,9 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         // A slight slowdown keeps the voice natural; slowing more makes it sound mechanical.
         utterance.rate = speed == "slow" ? AVSpeechUtteranceDefaultSpeechRate * 0.9 : AVSpeechUtteranceDefaultSpeechRate
         utterance.postUtteranceDelay = 0.2
+        currentUtterance = ObjectIdentifier(utterance)
         synthesizer.speak(utterance)
-        await withCheckedContinuation { finished = $0 }
+        await withCheckedContinuation { finished = $0; waiterGeneration = generation }
     }
 
     private var preparedText: String?
@@ -323,9 +326,11 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         // An empty buffer at the end tells us when everything before it has been played.
         if let end = AVAudioPCMBuffer(pcmFormat: pcmFormat, frameCapacity: 1) {
             end.frameLength = 1
+            let gen = generation
             await withCheckedContinuation { continuation in
                 finished = continuation
-                Self.schedule(end, on: streamNode) { Task { @MainActor in Speaker.shared.resumeWaiter() } }
+                waiterGeneration = gen
+                Self.schedule(end, on: streamNode) { Task { @MainActor in Speaker.shared.resumeWaiter(ifGeneration: gen) } }
             }
         }
         return true
@@ -397,6 +402,13 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         resumeWaiter()
     }
 
+    /// Ignores finish callbacks that belong to audio stopped earlier, so one sentence never
+    /// starts while another is still being spoken.
+    fileprivate func resumeWaiter(ifGeneration gen: Int) {
+        guard gen == waiterGeneration else { return }
+        resumeWaiter()
+    }
+
     fileprivate func resumeWaiter() {
         finished?.resume()
         finished = nil
@@ -404,15 +416,18 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
     // Delegate callbacks may arrive off the main actor, so they hop back explicitly.
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.resumeWaiter() }
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor in if id == self.currentUtterance { self.resumeWaiter() } }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.resumeWaiter() }
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor in if id == self.currentUtterance { self.resumeWaiter() } }
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor in self.resumeWaiter() }
+        let id = ObjectIdentifier(player)
+        Task { @MainActor in if let current = self.player, ObjectIdentifier(current) == id { self.resumeWaiter() } }
     }
 }
 
