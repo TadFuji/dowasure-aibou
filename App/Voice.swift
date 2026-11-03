@@ -212,15 +212,11 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         japaneseVoices.contains { $0.quality == .enhanced || $0.quality == .premium }
     }
 
-    /// Which voice to use: "device" (iPhone, no delay) or "cloud" (Gemini, most natural).
-    /// Unless the user chose, a downloaded high-quality iPhone voice wins because it has no delay.
+    /// Which voice to use: "cloud" (Gemini, most natural; the default) or "device" (iPhone, no delay).
     var usesCloudVoice: Bool {
         guard !APIKeyStore.load(account: APIKeyStore.voiceAccount).isEmpty else { return false }
-        switch UserDefaults.standard.string(forKey: Self.voiceModeKey) {
-        case "cloud": return true
-        case "device": return false
-        default: return !Self.hasHighQualityDeviceVoice
-        }
+        // The maker compared both and chose Gemini (2026-11-03); the iPhone voice is the fallback.
+        return UserDefaults.standard.string(forKey: Self.voiceModeKey) != "device"
     }
 
     /// Starts speaking without waiting.
