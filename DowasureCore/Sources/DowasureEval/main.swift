@@ -144,9 +144,10 @@ if CommandLine.arguments.contains("--interview-demo") {
     for answer in answers {
         turns.append(InterviewTurn(.user, answer))
         print("本人: \(answer)")
+        let t0 = Date()
         let step = try await interviewer.next(after: turns, today: asked("2026-11-03"), dayCalendar: tokyo)
         turns.append(InterviewTurn(.ai, step.say))
-        print("聞き手: \(step.say)\(step.done ? "（終了）" : "")")
+        print("聞き手: \(step.say)\(step.done ? "（終了）" : "")  [\(String(format: "%.1f", Date().timeIntervalSince(t0)))s]")
         if step.done { break }
     }
     let extraction = try await Recorder(client: client).extract(transcript: Interviewer.transcript(of: turns))
