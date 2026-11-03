@@ -134,8 +134,8 @@ final class FlowUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-uitest-reset-records", "-uitest-no-voice", "-uitest-load-samples"]
         app.launchEnvironment["DOWASURE_UITEST_API_KEY"] = key
-        // Also exercise the natural cloud voice (streaming) when its key is available locally.
-        app.launchEnvironment["DOWASURE_UITEST_VOICE_KEY"] = localSecret("gemini_api_key")
+        // The cloud voice key is not passed: Gemini TTS allows only 100 requests per day per model
+        // on Tier 1, and that quota is needed for the maker's real use.
         app.launch()
 
         app.buttons["askButton"].tap()

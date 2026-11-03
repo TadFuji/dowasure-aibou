@@ -6,6 +6,8 @@ import Foundation
 public struct CloudVoice: Sendable {
     public static let endpoint = URL(string: "https://generativelanguage.googleapis.com/v1beta/interactions")!
     public static let model = "gemini-3.8-flash-lite-tts"
+    /// Used when the main model hits its daily limit (Tier 1: 100 requests per day per model, 2026-11-03).
+    public static let fallbackModel = "gemini-3.8-flash-tts"
     /// Prebuilt voices described as warm or gentle, suited to an evening conversation.
     public static let voices: [(name: String, label: String)] = [
         ("Sulafat", "あたたかい声"),
@@ -17,6 +19,7 @@ public struct CloudVoice: Sendable {
     let apiKey: String
     let transport: HTTPTransport
     public var voiceName: String
+    public var model: String = CloudVoice.model
     /// Delivery hint, e.g. speaking slowly for older listeners.
     public var style: String
 
@@ -39,7 +42,7 @@ public struct CloudVoice: Sendable {
         var annotation: [String: JSONValue] = ["type": "speech_metadata"]
         if !style.isEmpty { annotation["style"] = .string(style) }
         let body: JSONValue = [
-            "model": .string(Self.model),
+            "model": .string(model),
             "input": [[
                 "type": "user_input",
                 "content": [[
@@ -66,7 +69,9 @@ public struct CloudVoice: Sendable {
                     request.timeoutInterval = 30
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                        throw ClaudeError.http(status: http.statusCode, body: "")
+                        var body = ""
+                        for try await line in bytes.lines { body += line }
+                        throw ClaudeError.http(status: http.statusCode, body: body)
                     }
                     for try await line in bytes.lines {
                         if let chunk = Self.audioChunk(fromSSELine: line) {

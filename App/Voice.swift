@@ -208,6 +208,11 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 
     static let voiceModeKey = "voiceMode"
+    nonisolated static let log = Logger(subsystem: "io.github.tadfuji.dowasure", category: "voice")
+    nonisolated static func trace(_ message: String) {
+        log.info("\(message, privacy: .public)")
+        print("VOICELOG \(message)")
+    }
 
     /// True when a high-quality Japanese voice has been downloaded on this iPhone (speaks with no delay).
     static var hasHighQualityDeviceVoice: Bool {
@@ -234,6 +239,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         try? AVAudioSession.sharedInstance().setActive(true)
 
         let cloudKey = usesCloudVoice ? APIKeyStore.load(account: APIKeyStore.voiceAccount) : ""
+        Self.trace("say: cloud=\(!cloudKey.isEmpty) mode=\(UserDefaults.standard.string(forKey: Self.voiceModeKey) ?? "nil") keySaved=\(!APIKeyStore.load(account: APIKeyStore.voiceAccount).isEmpty)")
         let cloudVoiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
         let style = Self.style(for: speed)
         if !cloudKey.isEmpty {
@@ -248,11 +254,21 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 await withCheckedContinuation { finished = $0; waiterGeneration = generation }
                 return
             }
-            if cacheFile == nil, await playStream(voice.stream(text), generation: mine) {
-                return
-            }
-            if mine != generation { return }
-            if let audio = try? await voice.synthesize(text), mine == generation, let player = try? AVAudioPlayer(data: audio) {
+            if cacheFile == nil {
+                // Main model first; if it has hit its daily limit, the other model (separate limit).
+                for model in Self.modelsToTry() {
+                    var v = voice
+                    v.model = model
+                    switch await playStream(v.stream(text), generation: mine) {
+                    case .played: return
+                    case .rateLimited: Self.markRateLimited(model); continue
+                    case .failed: break
+                    }
+                    break
+                }
+                guard mine == generation else { return }
+            } else if let audio = await synthesizeWithFallback(voice, text: text), mine == generation,
+                      let player = try? AVAudioPlayer(data: audio) {
                 if let cacheFile { try? audio.write(to: cacheFile) }
                 player.delegate = self
                 self.player = player
@@ -263,6 +279,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
             }
         }
         guard mine == generation else { return }
+        Self.trace("say: using built-in iPhone voice")
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
         // A slight slowdown keeps the voice natural; slowing more makes it sound mechanical.
@@ -272,6 +289,30 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         stopWaitingTone()
         synthesizer.speak(utterance)
         await withCheckedContinuation { finished = $0; waiterGeneration = generation }
+    }
+
+    // MARK: Daily limit handling
+
+    private static var rateLimitedUntil: [String: Date] = [:]
+
+    private static func modelsToTry() -> [String] {
+        [CloudVoice.model, CloudVoice.fallbackModel].filter { (rateLimitedUntil[$0] ?? .distantPast) < Date() }
+    }
+
+    private static func markRateLimited(_ model: String) {
+        trace("voice: daily limit reached for \(model)")
+        rateLimitedUntil[model] = Date().addingTimeInterval(60 * 60)
+    }
+
+    private func synthesizeWithFallback(_ voice: CloudVoice, text: String) async -> Data? {
+        for model in Self.modelsToTry() {
+            var v = voice
+            v.model = model
+            do { return try await v.synthesize(text) } catch ClaudeError.http(status: 429, _) {
+                Self.markRateLimited(model)
+            } catch { return nil }
+        }
+        return nil
     }
 
     // MARK: Waiting tone ("pon pon pon") while the AI thinks and the voice is prepared
@@ -341,15 +382,20 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     private var engineReady = false
 
     /// Plays streamed PCM chunks. Returns false (so the caller can fall back) if no audio arrived.
-    private func playStream(_ chunks: AsyncThrowingStream<Data, Error>, generation mine: Int) async -> Bool {
+    enum StreamResult { case played, rateLimited, failed }
+
+    private func playStream(_ chunks: AsyncThrowingStream<Data, Error>, generation mine: Int) async -> StreamResult {
         prepareEngine()
-        do { try engine.start() } catch { return false }
+        do { try engine.start() } catch {
+            Self.trace("stream: engine start failed: \(error.localizedDescription)")
+            return .failed
+        }
         var leftover = Data()
         var scheduled = 0
         let streamStart = Date()
         do {
             for try await chunk in chunks {
-                guard mine == generation else { return true }
+                guard mine == generation else { return .played }
                 var bytes = leftover + chunk
                 if bytes.count % 2 == 1 { leftover = bytes.suffix(1); bytes = bytes.dropLast() } else { leftover = Data() }
                 guard let buffer = Self.makeBuffer(pcm16: bytes, format: pcmFormat) else { continue }
@@ -359,13 +405,17 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                     stopWaitingTone()
                     streamNode.play()
                     Logger(subsystem: "io.github.tadfuji.dowasure", category: "voice")
-                        .info("stream first audio after \(Date().timeIntervalSince(streamStart), format: .fixed(precision: 2), privacy: .public)s")
+                        .info("stream first audio after \(Date().timeIntervalSince(streamStart), format: .fixed(precision: 2))s")
                 }
             }
         } catch {
-            if scheduled == 0 { return false }
+            Self.trace("stream: failed after \(scheduled) chunks: \(String(describing: error))")
+            if scheduled == 0 {
+                if case ClaudeError.http(status: 429, _) = error { return .rateLimited }
+                return .failed
+            }
         }
-        guard scheduled > 0, mine == generation else { return scheduled > 0 }
+        guard scheduled > 0, mine == generation else { return scheduled > 0 ? .played : .failed }
         // An empty buffer at the end tells us when everything before it has been played.
         if let end = AVAudioPCMBuffer(pcmFormat: pcmFormat, frameCapacity: 1) {
             end.frameLength = 1
@@ -376,7 +426,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 Self.schedule(end, on: streamNode) { Task { @MainActor in Speaker.shared.resumeWaiter(ifGeneration: gen) } }
             }
         }
-        return true
+        return .played
     }
 
     nonisolated private static func enqueue(_ buffer: AVAudioPCMBuffer, on node: AVAudioPlayerNode) {

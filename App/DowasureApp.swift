@@ -29,6 +29,16 @@ struct DowasureApp: App {
         for v in AVSpeechSynthesisVoice.speechVoices() where v.language == "ja-JP" {
             print("VOICE \(v.name) | \(v.identifier) | quality=\(v.quality.rawValue) | gender=\(v.gender.rawValue)")
         }
+        // Speaks one sentence at launch to check which voice path works on a real device.
+        if args.contains("-voice-selftest") {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                Speaker.shared.startWaitingTone()
+                try? await Task.sleep(for: .seconds(1))
+                await Speaker.shared.sayAndWait("午後は、どこかへお出かけになりましたか？")
+                Speaker.trace("selftest: done")
+            }
+        }
         // Live UI tests hand the key over from the developer's local secrets file.
         if let key = ProcessInfo.processInfo.environment["DOWASURE_UITEST_API_KEY"], !key.isEmpty {
             APIKeyStore.save(key)

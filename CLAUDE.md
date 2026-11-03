@@ -37,6 +37,8 @@ cd "/Volumes/ROCKET_XTRM/coding/Built with Claude" && xcodegen generate && xcode
 
 ## 既知の問題
 
+- Gemini TTS は Tier 1 で1モデルあたり1日100回まで（2026-11-03 確認）。上限時は gemini-3.8-flash-tts に切り替える。試験で藤川さんの枠を使わない（`--voice-demo` や自己点検 `-voice-selftest` は必要な時だけ）。
+
 - iOS 26.5 シミュレーターでは通知の許可要求が usernotificationsd に拒否される（UNErrorDomain 1、requestAuthorization not allowed）。お知らせの実際の動作は実機で確認する。
 
 - シミュレーターでは端末内音声認識の初期化に失敗する（kLSRErrorDomain Code=300）。声の確認は実機で行う。失敗時は画面に「うまく聞き取れませんでした」と出る。
