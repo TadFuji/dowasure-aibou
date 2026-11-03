@@ -214,15 +214,20 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
 
 @Suite struct CloudVoiceTests {
     @Test func requestCarriesTextVoiceAndKey() async throws {
-        let audio = Data("mp3".utf8).base64EncodedString()
-        let fake = FakeTransport(body: #"{"audioContent":"\#(audio)"}"#)
+        let audio = Data("wav".utf8).base64EncodedString()
+        let fake = FakeTransport(body: #"{"steps":[{"type":"user_input"},{"type":"model_output","content":[{"type":"audio","data":"\#(audio)"}]}]}"#)
         let data = try await CloudVoice(apiKey: "g-key", transport: fake).synthesize("こんばんは")
-        #expect(data == Data("mp3".utf8))
+        #expect(data == Data("wav".utf8))
         let req = try #require(fake.lastRequest)
-        #expect(req.url?.query == "key=g-key")
+        #expect(req.value(forHTTPHeaderField: "x-goog-api-key") == "g-key")
+        #expect(req.url?.query == nil)
         let json = try JSONSerialization.jsonObject(with: req.httpBody!) as! [String: Any]
-        #expect((json["input"] as! [String: Any])["text"] as? String == "こんばんは")
-        #expect((json["voice"] as! [String: Any])["languageCode"] as? String == "ja-JP")
+        #expect(json["model"] as? String == CloudVoice.model)
+        let input = (json["input"] as! [[String: Any]])[0]
+        let content = (input["content"] as! [[String: Any]])[0]
+        #expect(content["text"] as? String == "こんばんは")
+        let speech = (json["generation_config"] as! [String: Any])["speech_config"] as! [[String: Any]]
+        #expect(speech[0]["voice"] as? String == CloudVoice.defaultVoiceName)
     }
 
     @Test func missingKeyFailsWithoutNetwork() async {
@@ -236,6 +241,13 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
     @Test func httpErrorIsReported() async {
         let fake = FakeTransport(status: 403, body: "{}")
         await #expect(throws: ClaudeError.http(status: 403, body: "{}")) {
+            _ = try await CloudVoice(apiKey: "k", transport: fake).synthesize("x")
+        }
+    }
+
+    @Test func missingAudioIsAnError() async {
+        let fake = FakeTransport(body: #"{"steps":[{"type":"model_output","content":[{"type":"text"}]}]}"#)
+        await #expect(throws: ClaudeError.decoding("tts audio missing")) {
             _ = try await CloudVoice(apiKey: "k", transport: fake).synthesize("x")
         }
     }

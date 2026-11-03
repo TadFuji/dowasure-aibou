@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var showSetup = false
     @State private var voiceKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
     @State private var voiceKeyMessage: String?
+    @AppStorage(Speaker.cloudVoiceKey) private var cloudVoiceName = CloudVoice.defaultVoiceName
+    private var hasCloudVoiceKey: Bool { !voiceKey.isEmpty && voiceKeyMessage != "保存できませんでした。" }
     @AppStorage("speechSpeed") private var speechSpeed = "slow"
     @AppStorage(Speaker.voiceKey) private var voiceIdentifier = ""
     @AppStorage(EveningReminder.enabledKey) private var reminderEnabled = false
@@ -53,6 +55,23 @@ struct SettingsView: View {
             }
 
             Section {
+                if hasCloudVoiceKey {
+                    ForEach(CloudVoice.voices, id: \.name) { item in
+                        Button {
+                            cloudVoiceName = item.name
+                            Speaker.shared.say("今日も一日、おつかれさまでした。")
+                        } label: {
+                            HStack {
+                                Text(item.label).font(.title2)
+                                Spacer()
+                                if item.name == cloudVoiceName {
+                                    Image(systemName: "checkmark.circle.fill").font(.title).foregroundStyle(.green)
+                                }
+                            }
+                        }
+                        .foregroundStyle(.primary)
+                    }
+                } else {
                 ForEach(voices, id: \.identifier) { voice in
                     Button {
                         voiceIdentifier = voice.identifier
@@ -72,12 +91,13 @@ struct SettingsView: View {
                     }
                     .foregroundStyle(.primary)
                 }
+                }
                 Picker("速さ", selection: $speechSpeed) {
                     Text("ゆっくり").tag("slow")
                     Text("ふつう").tag("normal")
                 }
                 .pickerStyle(.segmented)
-                Text("押すと、その声で読み上げます。もっと自然な声は、iPhone の「設定」→「アクセシビリティ」→「読み上げコンテンツ」→「声」→「日本語」から追加できます。")
+                Text("押すと、その声で読み上げます。")
                     .font(.body).foregroundStyle(.secondary)
             } header: {
                 Text("声").font(.title3.bold())
@@ -97,7 +117,7 @@ struct SettingsView: View {
                             .foregroundStyle(keyMessage == "保存しました。" ? .green : .red)
                             .accessibilityIdentifier("keyMessage")
                     }
-                    SecureField("自然な声のキー（Google）", text: $voiceKey)
+                    SecureField("自然な声のキー（Google AI Studio）", text: $voiceKey)
                         .textContentType(.password)
                     Button("自然な声のキーを保存する") {
                         voiceKeyMessage = APIKeyStore.save(voiceKey, account: APIKeyStore.voiceAccount) ? "保存しました。" : "保存できませんでした。"

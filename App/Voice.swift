@@ -174,6 +174,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     var speed: String { UserDefaults.standard.string(forKey: "speechSpeed") ?? "slow" }
 
     static let voiceKey = "voiceIdentifier"
+    static let cloudVoiceKey = "cloudVoiceName"
 
     /// Regular Japanese voices installed on this iPhone, female first, then most natural.
     /// Only Apple's standard voices ("com.apple.voice.*") are offered: the character voices
@@ -219,14 +220,15 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
         let cloudKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
         var cloudPlayer: AVAudioPlayer?
-        if !cloudKey.isEmpty, let audio = try? await CloudVoice(apiKey: cloudKey).synthesize(text) {
+        let cloudVoiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
+        let style = speed == "slow" ? "calm, kind and warm, speaking slowly and clearly" : "calm, kind and warm"
+        if !cloudKey.isEmpty,
+           let audio = try? await CloudVoice(apiKey: cloudKey, voiceName: cloudVoiceName, style: style).synthesize(text) {
             cloudPlayer = try? AVAudioPlayer(data: audio)
         }
         guard mine == generation else { return }
         if let player = cloudPlayer {
             player.delegate = self
-            player.rate = speed == "slow" ? 0.92 : 1.0
-            player.enableRate = true
             self.player = player
             player.play()
         } else {

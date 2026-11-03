@@ -96,6 +96,28 @@ func readAPIKey() -> String {
     return key
 }
 
+// --voice-demo: synthesizes one sentence with the Gemini TTS voice (key in ../secrets/gemini_api_key)
+// and writes eval-results/voice-demo-<voice>.wav, to check the cloud voice works.
+if CommandLine.arguments.contains("--voice-demo") {
+    let url = packageDir.appendingPathComponent("../secrets/gemini_api_key").standardizedFileURL
+    guard let raw = try? String(contentsOf: url, encoding: .utf8),
+          !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        fail("No Gemini key: put it in ../secrets/gemini_api_key")
+    }
+    let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let outDir = packageDir.appendingPathComponent("eval-results")
+    try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+    for voice in CloudVoice.voices {
+        let start = Date()
+        let audio = try await CloudVoice(apiKey: key, voiceName: voice.name)
+            .synthesize("今日は、どなたかと会ったり、話したりしましたか？")
+        let file = outDir.appendingPathComponent("voice-demo-\(voice.name).wav")
+        try audio.write(to: file)
+        print("\(voice.name) (\(voice.label)): \(audio.count) bytes, \(String(format: "%.1f", Date().timeIntervalSince(start)))s -> \(file.lastPathComponent)")
+    }
+    exit(0)
+}
+
 // --interview-demo: plays the evening conversation against the real API with scripted answers,
 // then runs extraction on it. For checking the interviewer's tone and limits by eye.
 if CommandLine.arguments.contains("--interview-demo") {
