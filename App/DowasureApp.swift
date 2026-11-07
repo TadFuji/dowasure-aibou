@@ -21,8 +21,9 @@ struct DowasureApp: App {
             APIKeyStore.save("")
         }
         if args.contains("-uitest-no-voice") {
-            // Tests must not use the maker's daily Gemini voice quota.
+            // Tests must not use the maker's daily Gemini voice quota (directly or through the relay).
             APIKeyStore.save("", account: APIKeyStore.voiceAccount)
+            UserDefaults.standard.set("device", forKey: Speaker.voiceModeKey)
         }
         if args.contains("-uitest-load-samples") {
             for record in SampleData.records(today: Date()) {

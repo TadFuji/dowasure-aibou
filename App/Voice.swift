@@ -267,8 +267,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 
     /// Which voice to use: "cloud" (Gemini, most natural; the default) or "device" (iPhone, no delay).
+    /// No Google key is needed on the iPhone: the voice goes through the maker's relay (2026-11-07).
     var usesCloudVoice: Bool {
-        guard !APIKeyStore.load(account: APIKeyStore.voiceAccount).isEmpty else { return false }
         // The maker compared both and chose Gemini (2026-11-03); the iPhone voice is the fallback.
         return UserDefaults.standard.string(forKey: Self.voiceModeKey) != "device"
     }
@@ -285,14 +285,17 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
 
-        let cloudKey = usesCloudVoice ? APIKeyStore.load(account: APIKeyStore.voiceAccount) : ""
-        Self.trace("say: cloud=\(!cloudKey.isEmpty) mode=\(UserDefaults.standard.string(forKey: Self.voiceModeKey) ?? "nil") keySaved=\(!APIKeyStore.load(account: APIKeyStore.voiceAccount).isEmpty)")
+        let useCloud = usesCloudVoice
+        // A developer's own Google key (DEBUG launch) talks to Google directly; otherwise the relay.
+        let ownKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
+        Self.trace("say: cloud=\(useCloud) mode=\(UserDefaults.standard.string(forKey: Self.voiceModeKey) ?? "nil") ownKey=\(!ownKey.isEmpty)")
         let cloudVoiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
         let style = Self.style(for: speed)
-        if !cloudKey.isEmpty {
-            let voice = CloudVoice(apiKey: cloudKey, voiceName: cloudVoiceName, style: style)
+        if useCloud {
+            let voice = CloudVoice(apiKey: ownKey, voiceName: cloudVoiceName, style: style)
             let cacheFile = Self.cacheURL(text: text, voice: cloudVoiceName, style: style)
-            if let cached = cacheFile.flatMap({ try? Data(contentsOf: $0) }), let player = try? AVAudioPlayer(data: cached) {
+            let bundled = Self.bundledURL(text: text, voice: cloudVoiceName, style: style)
+            if let cached = (bundled ?? cacheFile).flatMap({ try? Data(contentsOf: $0) }), let player = try? AVAudioPlayer(data: cached) {
                 // Fixed phrase already on the iPhone: plays at once.
                 player.delegate = self
                 self.player = player
@@ -548,19 +551,31 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     nonisolated private static func cacheURL(text: String, voice: String, style: String) -> URL? {
         guard fixedPhrases.contains(text),
               let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
+        return dir.appendingPathComponent("\(fileStem(text: text, voice: voice, style: style)).wav")
+    }
+
+    nonisolated static func fileStem(text: String, voice: String, style: String) -> String {
         let digest = SHA256.hash(data: Data("\(voice)|\(style)|\(text)".utf8)).map { String(format: "%02x", $0) }.joined()
-        return dir.appendingPathComponent("voice-\(digest).wav")
+        return "voice-\(digest)"
+    }
+
+    /// Fixed phrases recorded once with the Gemini voice and shipped inside the app (`App/Resources/Voice`),
+    /// so they play at once even on the first launch and without the network.
+    nonisolated private static func bundledURL(text: String, voice: String, style: String) -> URL? {
+        guard fixedPhrases.contains(text) else { return nil }
+        return Bundle.main.url(forResource: fileStem(text: text, voice: voice, style: style), withExtension: "wav")
     }
 
     /// Prepares the fixed phrases in the background (called at launch and when the voice changes).
     func prewarm() {
+        guard usesCloudVoice else { return }
         let key = APIKeyStore.load(account: APIKeyStore.voiceAccount)
-        guard !key.isEmpty else { return }
         let voiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
         let style = Self.style(for: speed)
         Task.detached {
             for phrase in Self.fixedPhrases {
-                guard let url = Self.cacheURL(text: phrase, voice: voiceName, style: style),
+                guard Self.bundledURL(text: phrase, voice: voiceName, style: style) == nil,
+                      let url = Self.cacheURL(text: phrase, voice: voiceName, style: style),
                       !FileManager.default.fileExists(atPath: url.path) else { continue }
                 if let audio = try? await CloudVoice(apiKey: key, voiceName: voiceName, style: style).synthesize(phrase) {
                     try? audio.write(to: url)
