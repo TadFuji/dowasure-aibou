@@ -22,6 +22,11 @@ struct AskView: View {
     /// Set after "not found, when was it?": the next short reply is searched together with it.
     @State private var pendingQuestion: String?
     @State private var started = false
+    /// From opening the screen until the microphone starts (the prompt is being said).
+    @State private var waitingToListen = false
+    /// A hint is being said and the microphone opens right after: the button already reads "話し終わった",
+    /// so it does not change under the user's finger (elder-user-reviewer, 2026-11-07).
+    @State private var hintSpeaking = false
     /// Changes with every new question; an older question that is still speaking must not
     /// start the microphone or clear the "searching" state of the newer one.
     @State private var askGeneration = 0
@@ -64,7 +69,7 @@ struct AskView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                MicStatus(voice: voice)
+                MicStatus(voice: voice, waiting: waitingToListen)
                 if let errorMessage {
                     WarningText(text: errorMessage)
                 }
@@ -83,9 +88,15 @@ struct AskView: View {
             guard !started else { return }
             started = true
             guard voiceEnabled else { return }
+            waitingToListen = true
             await Speaker.shared.sayAndWait(Self.prompt)
-            guard !Task.isCancelled, !voice.isListening, !isWorking, session == nil else { return }
+            // "話し終わった" pressed, a typed question started, or the screen was left: do not listen.
+            guard !Task.isCancelled, waitingToListen, !voice.isListening, !isWorking, session == nil else {
+                waitingToListen = false
+                return
+            }
             await voice.start(onFinish: heardQuestion)
+            waitingToListen = false
         }
         .onDisappear {
             askTask?.cancel()
@@ -116,7 +127,10 @@ struct AskView: View {
                 Speaker.shared.say(replyText)
             }
         }
-        MicButton(voice: voice, idleTitle: "声でたずねる", onText: heardQuestion)
+        MicButton(voice: voice, idleTitle: "声でたずねる", waitingToListen: waitingToListen,
+                  onCancelWaiting: cancelWaiting, onText: heardQuestion)
+            // While searching, a new question would only be dropped (ios-reviewer, 2026-11-07).
+            .disabled(isWorking)
         TextField("文字で聞く（例：先週会った眼鏡の人の名前）", text: $question, axis: .vertical)
             .font(.title2)
             .lineLimit(1...3)
@@ -136,16 +150,19 @@ struct AskView: View {
     /// While hints are shown: say a guess, ask for another hint, or ask for the answer.
     /// Speaking is the main way; typing is folded away so the bottom area has only a few big choices.
     @ViewBuilder private var hintControls: some View {
-        MicButton(voice: voice, idleTitle: "思い出したことを言う") { spoken in
+        MicButton(voice: voice, idleTitle: "思い出したことを言う", waitingToListen: hintSpeaking,
+                  onCancelWaiting: cancelHintListening) { spoken in
             respond(spoken)
         }
         HStack(spacing: 12) {
+            // "もう少しヒント" is the filled one and "答えを教えて" only outlined: the app's aim is a hint,
+            // not the answer, and the filled button is the one pressed by mistake (elder-user-reviewer, 2026-11-07).
             Button {
                 show(session?.moreHint())
             } label: {
                 Text("もう少しヒント").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: Style.dockButtonHeight)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.borderedProminent)
             .tint(Palette.orange)
             .accessibilityIdentifier("moreHintButton")
             Button {
@@ -153,7 +170,7 @@ struct AskView: View {
             } label: {
                 Text("答えを教えて").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: Style.dockButtonHeight)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .tint(Palette.orange)
             .accessibilityIdentifier("revealButton")
         }
@@ -236,17 +253,36 @@ struct AskView: View {
     private func speak(_ reply: HintSession.Reply) {
         hintTask?.cancel()
         voice.cancel()
+        hintSpeaking = false
         guard voiceEnabled, !reply.revealed else {
             say(reply.text)
             return
         }
         replyText = reply.text
         hintTask = Task {
+            hintSpeaking = true
             await Speaker.shared.sayAndWait(reply.text)
+            // A newer hint (or the answer) took over: it owns the flag now.
+            if !Task.isCancelled { hintSpeaking = false }
             // Not while the user is typing the guess.
             guard !Task.isCancelled, session?.revealed == false, !typingGuess, !voice.isListening else { return }
             await voice.start(onFinish: respond)
         }
+    }
+
+    /// "話し終わった" before the microphone started: stop the prompt and do not listen.
+    private func cancelWaiting() {
+        waitingToListen = false
+        Speaker.shared.stop()
+        voice.cancel()
+    }
+
+    /// "話し終わった" pressed while a hint is being said: stop it and do not open the microphone.
+    private func cancelHintListening() {
+        hintTask?.cancel()
+        hintSpeaking = false
+        Speaker.shared.stop()
+        voice.cancel()
     }
 
     private func repeatHint(_ text: String) {
@@ -261,6 +297,7 @@ struct AskView: View {
     /// Starts one question at a time (a spoken and a typed question must not run together).
     private func startAsking() {
         guard !isWorking else { return }
+        waitingToListen = false
         // The previous question may still be speaking "見当たりません…" (isWorking is already false then).
         askTask?.cancel()
         hintTask?.cancel()

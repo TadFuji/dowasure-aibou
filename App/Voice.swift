@@ -41,6 +41,10 @@ final class VoiceInput {
         // Decide before the first await: two quick calls must not both start the microphone.
         guard state != .listening, !isStarting else { return }
         isStarting = true
+        // The microphone is (about to be) used: the waiting tone must not keep sounding, even when the start
+        // fails below (no permission). Before this, a reply cut short by "ほかにも話す" left the tone
+        // looping (ios-reviewer, 2026-11-07; moved here on its second look).
+        Speaker.shared.stopWaitingTone()
         if !observingInterruptions {
             observingInterruptions = true
             // A phone call or Siri takes the microphone: finish cleanly instead of hanging.
@@ -76,6 +80,13 @@ final class VoiceInput {
 
             let input = engine.inputNode
             let format = input.outputFormat(forBus: 0)
+            // During a phone call the microphone can report no format; installing a tap then crashes
+            // the app with an exception Swift cannot catch (ios-reviewer, 2026-11-07).
+            guard format.sampleRate > 0, format.channelCount > 0 else {
+                cleanUp()
+                state = .failed("いまはマイクを使えません。電話などが終わってから、もう一度お試しください。")
+                return
+            }
             input.removeTap(onBus: 0)
             Self.installTap(on: input, format: format, request: request)
             engine.prepare()
@@ -290,6 +301,15 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         let mine = generation
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
+        // Volume 0: nobody hears it, so do not make the user wait in silence. Return at once; the words
+        // are already on the screen and the microphone starts (with a vibration) right away.
+        // (2026-11-07, 藤川さん：「いえ、音量が０でも使えるUIにしてください。」)
+        VolumeWatcher.shared.refresh()
+        if VolumeWatcher.shared.isTooLow {
+            stopWaitingTone()
+            Self.trace("say: skipped, volume is 0")
+            return
+        }
 
         let useCloud = usesCloudVoice
         // A developer's own Google key (DEBUG launch) talks to Google directly; otherwise the relay.
@@ -686,7 +706,17 @@ struct RepeatButton: View {
 
     var body: some View {
         Button {
-            if let action { action() } else { Speaker.shared.say(text) }
+            let sayAgain: @MainActor () -> Void = { if let action { action() } else { Speaker.shared.say(text) } }
+            VolumeWatcher.shared.refresh()
+            if VolumeWatcher.shared.isTooLow {
+                // Volume 0: pressing must not seem to do nothing (2026-11-07, 藤川さん：「もう一度聞く」としても、
+                // 当然ながら何もならないですよね). Tell how to hear it, by a vibration and big words at the top,
+                // and say it by itself as soon as the volume is turned up.
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                VolumeWatcher.shared.waitForVolume(then: sayAgain)
+            } else {
+                sayAgain()
+            }
         } label: {
             Label("もう一度きく", systemImage: "speaker.wave.2.fill")
                 .font(.title2.bold())
@@ -696,6 +726,8 @@ struct RepeatButton: View {
         .buttonStyle(.bordered)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .accessibilityIdentifier("repeatButton")
+        // Leaving the screen: do not suddenly speak elsewhere when the volume goes up later.
+        .onDisappear { VolumeWatcher.shared.cancelWaiting() }
     }
 }
 
@@ -703,25 +735,35 @@ struct RepeatButton: View {
 struct MicButton: View {
     let voice: VoiceInput
     var idleTitle = "声で話す"
+    /// The screen has just opened and will listen as soon as its opening words are said.
+    /// The button already reads "話し終わった" then, so it does not change under the user's finger
+    /// (2026-11-07, 藤川さん：「声で話す」ボタンがしばらく表示され、そのあとに「話し終わった」ボタンに変わる).
+    var waitingToListen = false
+    /// "話し終わった" pressed before the microphone started: the screen stops the opening words and does not listen.
+    var onCancelWaiting: (() -> Void)? = nil
     let onText: (String) -> Void
+
+    private var showsStop: Bool { voice.isListening || waitingToListen }
 
     var body: some View {
         Button {
             if voice.isListening {
                 voice.stop()
+            } else if waitingToListen {
+                onCancelWaiting?()
             } else {
                 Speaker.shared.stop()
                 Task { await voice.start(onFinish: onText) }
             }
         } label: {
-            Label(voice.isListening ? "話し終わった" : idleTitle,
-                  systemImage: voice.isListening ? "stop.circle.fill" : "mic.fill")
+            Label(showsStop ? "話し終わった" : idleTitle,
+                  systemImage: showsStop ? "stop.circle.fill" : "mic.fill")
                 .font(.title.bold())
                 .wrapsForLargeText()
                 .frame(maxWidth: .infinity, minHeight: 100)
         }
         .buttonStyle(.borderedProminent)
-        .tint(voice.isListening ? Palette.red : Palette.green)
+        .tint(showsStop ? Palette.red : Palette.green)
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityIdentifier("micButton")
     }
@@ -731,17 +773,129 @@ struct MicButton: View {
 /// while the microphone button itself sits at the bottom within reach of the thumb.
 struct MicStatus: View {
     let voice: VoiceInput
+    /// The opening words are still being said; the microphone starts right after them.
+    var waiting = false
 
     var body: some View {
-        if voice.isListening {
-            Label(voice.text.isEmpty ? "どうぞ、お話しください…" : voice.text, systemImage: "mic.fill")
+        if waiting && !voice.isListening {
+            // Without this, the user did not know when to start (2026-11-07, 藤川さん：「お話しください」と出て、
+            // iPhoneが一瞬ブルっとするのは、3秒後ぐらい).
+            Label("ブルっとしたら、お話しください", systemImage: "hourglass")
                 .font(.title2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("micStatus")
+                .accessibilityIdentifier("micWaiting")
+        }
+        if voice.isListening {
+            if voice.text.isEmpty {
+                // The moment to speak, told by sight as well as the vibration: works with the volume at 0.
+                Label("どうぞ、お話しください", systemImage: "mic.fill")
+                    .font(.title.bold())
+                    .foregroundStyle(Palette.green)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Palette.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.green, lineWidth: 3))
+                    .accessibilityIdentifier("micStatus")
+            } else {
+                Label(voice.text, systemImage: "mic.fill")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("micStatus")
+            }
         }
         if case .failed(let message) = voice.state {
             WarningText(text: message)
+        }
+    }
+}
+
+
+/// Watches the iPhone's volume, so a muted phone is noticed: the app talks, and with the volume at 0
+/// the user just waits in silence (2026-11-07, 藤川さん：「音量をゼロにしていました」).
+@MainActor @Observable
+final class VolumeWatcher {
+    static let shared = VolumeWatcher()
+    /// Below this the voice is practically not heard.
+    static let lowLimit: Float = 0.06
+
+    private(set) var volume: Float
+    /// "もう一度きく" was pressed with the volume at 0: said as soon as the volume is turned up.
+    private(set) var isWaitingForVolume = false
+    @ObservationIgnored private var pendingSay: (@MainActor () -> Void)?
+    @ObservationIgnored private var observation: NSKeyValueObservation?
+
+    private init() {
+        let session = AVAudioSession.sharedInstance()
+        volume = session.outputVolume
+        observation = session.observe(\.outputVolume, options: [.new]) { _, change in
+            guard let value = change.newValue else { return }
+            Task { @MainActor in VolumeWatcher.shared.update(value) }
+        }
+    }
+
+    var isTooLow: Bool { volume < Self.lowLimit }
+
+    /// Reads the volume again (the audio session has just been made active, so the value is fresh).
+    func refresh() {
+        update(AVAudioSession.sharedInstance().outputVolume)
+    }
+
+    func waitForVolume(then say: @escaping @MainActor () -> Void) {
+        pendingSay = say
+        isWaitingForVolume = true
+    }
+
+    func cancelWaiting() {
+        pendingSay = nil
+        isWaitingForVolume = false
+    }
+
+    private func update(_ value: Float) {
+        let wasLow = isTooLow
+        volume = value
+        // Turned down to 0 while the app is talking: stop the voice now, so the microphone opens
+        // instead of the user waiting for a sentence nobody hears.
+        if !wasLow && isTooLow { Speaker.shared.stop() }
+        // Turned up after "もう一度きく" was pressed at volume 0: say it now.
+        if wasLow && !isTooLow, let say = pendingSay {
+            cancelWaiting()
+            say()
+        }
+    }
+}
+
+/// Shown at the top of every screen while the volume is (almost) 0. It does not ask the user to turn
+/// the sound up: the app works without sound (藤川さん：「いえ、音量が０でも使えるUIにしてください。」).
+/// It only says how the app tells things instead. Words and a mark, not color alone.
+struct VolumeWarning: View {
+    private let watcher = VolumeWatcher.shared
+    /// UI tests run with sound off; the warning would only get in the way there.
+    private let enabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
+
+    var body: some View {
+        if enabled && watcher.isTooLow && watcher.isWaitingForVolume {
+            // After "もう一度きく" at volume 0: the way to hear it, large and bold.
+            Label("iPhone の左横のボタンで音を大きくすると、すぐに声で読み上げます。", systemImage: "speaker.wave.2.fill")
+                .font(.title2.bold())
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(.indigo.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(.indigo, lineWidth: 3))
+                .accessibilityIdentifier("volumeUpToHear")
+        } else if enabled && watcher.isTooLow {
+            Label("音が出ていないので、文字とブルっという振動でお知らせします。", systemImage: "speaker.slash.fill")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityIdentifier("volumeWarning")
         }
     }
 }

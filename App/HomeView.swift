@@ -19,6 +19,7 @@ struct HomeView: View {
                 // Scrolls when the user's text size is very large, so nothing is cut off.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
+                        VolumeWarning()
                         if needsSetup {
                             setupNotice
                         }
