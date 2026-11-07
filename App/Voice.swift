@@ -32,12 +32,20 @@ final class VoiceInput {
     /// Identifies the current recognition, so late callbacks from an earlier one are ignored.
     private var recognitionID = 0
 
+    /// Registered on the first start (SwiftUI may create this object more than once before using it).
+    private var observingInterruptions = false
+
     var isListening: Bool { state == .listening }
 
     func start(onFinish: @escaping (String) -> Void) async {
         // Decide before the first await: two quick calls must not both start the microphone.
         guard state != .listening, !isStarting else { return }
         isStarting = true
+        if !observingInterruptions {
+            observingInterruptions = true
+            // A phone call or Siri takes the microphone: finish cleanly instead of hanging.
+            Self.observeInterruptions { [weak self] in self?.stop() }
+        }
         startToken += 1
         let mine = startToken
         defer { if mine == startToken { isStarting = false } }
@@ -156,6 +164,15 @@ final class VoiceInput {
     // The callbacks below run on background threads. They live in nonisolated functions
     // so Swift does not treat them as main-actor code (which would crash at runtime).
 
+    /// Calls `began` on the main actor when another app (a call, Siri, an alarm) interrupts audio.
+    nonisolated static func observeInterruptions(_ began: @escaping @MainActor @Sendable () -> Void) {
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) { note in
+            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            guard raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .began else { return }
+            Task { @MainActor in began() }
+        }
+    }
+
     nonisolated private static func requestPermissions() async -> Bool {
         let speech = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
             SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0 == .authorized) }
@@ -200,6 +217,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     override init() {
         super.init()
         synthesizer.delegate = self
+        // On an interruption, stop and release anyone waiting, so the app never waits for audio that will not finish.
+        VoiceInput.observeInterruptions { Speaker.shared.stopEverything() }
     }
 
     /// "slow" or "normal", chosen in settings (key "speechSpeed").
@@ -278,9 +297,12 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 player.delegate = self
                 self.player = player
                 stopWaitingTone()
-                player.play()
-                await withCheckedContinuation { finished = $0; waiterGeneration = generation }
-                return
+                if player.play() {
+                    await withCheckedContinuation { finished = $0; waiterGeneration = generation }
+                    return
+                }
+                // Could not play (e.g. audio is busy): fall through to the other ways, never wait forever.
+                self.player = nil
             }
             if cacheFile == nil {
                 // Main model first; if it has hit its daily limit, the other model (separate limit).
@@ -301,9 +323,11 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 player.delegate = self
                 self.player = player
                 stopWaitingTone()
-                player.play()
-                await withCheckedContinuation { finished = $0; waiterGeneration = generation }
-                return
+                if player.play() {
+                    await withCheckedContinuation { finished = $0; waiterGeneration = generation }
+                    return
+                }
+                self.player = nil
             }
         }
         guard mine == generation else { return }
@@ -322,15 +346,21 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
     // MARK: Daily limit handling
 
-    private static var rateLimitedUntil: [String: Date] = [:]
+    /// Kept on the iPhone (not only in memory), so after reopening the app the first sentence
+    /// does not wait for a model that already hit its daily limit. Tried again after an hour.
+    private static let rateLimitKey = "voiceRateLimitedUntil"
 
     private static func modelsToTry() -> [String] {
-        [CloudVoice.model, CloudVoice.fallbackModel].filter { (rateLimitedUntil[$0] ?? .distantPast) < Date() }
+        let until = UserDefaults.standard.dictionary(forKey: rateLimitKey) as? [String: Double] ?? [:]
+        let now = Date().timeIntervalSince1970
+        return [CloudVoice.model, CloudVoice.fallbackModel].filter { (until[$0] ?? 0) < now }
     }
 
     private static func markRateLimited(_ model: String) {
         trace("voice: daily limit reached for \(model)")
-        rateLimitedUntil[model] = Date().addingTimeInterval(60 * 60)
+        var until = UserDefaults.standard.dictionary(forKey: rateLimitKey) as? [String: Double] ?? [:]
+        until[model] = Date().addingTimeInterval(60 * 60).timeIntervalSince1970
+        UserDefaults.standard.set(until, forKey: rateLimitKey)
     }
 
     private func synthesizeWithFallback(_ voice: CloudVoice, text: String) async -> Data? {
@@ -353,7 +383,9 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
     /// Starts a soft, repeating three-beep tone. It stops by itself when the next voice starts.
     func startWaitingTone() {
-        guard !toneOn else { return }
+        // If the audio engine was stopped behind our back (call, headphones unplugged), start the tone again.
+        if toneOn && engine.isRunning { return }
+        if toneOn { toneNode.stop(); toneOn = false }
         prepareEngine()
         guard let pattern = Self.tonePattern(format: pcmFormat) else { return }
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
@@ -450,6 +482,10 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 scheduled += 1
                 if scheduled == 1 {
                     stopWaitingTone()
+                    // Playing on a stopped engine crashes; restart it, or let the iPhone voice take over.
+                    if !engine.isRunning {
+                        do { try engine.start() } catch { return .failed }
+                    }
                     streamNode.play()
                     Logger(subsystem: "io.github.tadfuji.dowasure", category: "voice")
                         .info("stream first audio after \(Date().timeIntervalSince(streamStart), format: .fixed(precision: 2))s")

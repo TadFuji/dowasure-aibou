@@ -66,7 +66,8 @@ public struct CloudVoice: Sendable {
             let task = Task {
                 do {
                     var request = try makeRequest(text: text, stream: true)
-                    request.timeoutInterval = 30
+                    // If no audio comes for this long, give up so the iPhone voice speaks instead of silence.
+                    request.timeoutInterval = 12
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                         var body = ""

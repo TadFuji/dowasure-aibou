@@ -10,7 +10,8 @@ struct DowasureApp: App {
 
     init() {
         container = try! ModelContainer(for: StoredDay.self)
-        // Launch arguments used only by UI tests to start from a known state.
+        #if DEBUG
+        // Launch arguments used only by UI tests to start from a known state (not in the App Store build).
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-uitest-reset") || args.contains("-uitest-reset-records") {
             try? container.mainContext.delete(model: StoredDay.self)
@@ -28,7 +29,6 @@ struct DowasureApp: App {
                 try? RecordStore.save(record, in: container.mainContext)
             }
         }
-        #if DEBUG
         // Lists the Japanese voices this device offers to apps (checked when choosing voices).
         for v in AVSpeechSynthesisVoice.speechVoices() where v.language == "ja-JP" {
             print("VOICE \(v.name) | \(v.identifier) | quality=\(v.quality.rawValue) | gender=\(v.gender.rawValue)")
