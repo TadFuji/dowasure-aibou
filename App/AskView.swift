@@ -22,6 +22,9 @@ struct AskView: View {
     /// Set after "not found, when was it?": the next short reply is searched together with it.
     @State private var pendingQuestion: String?
     @State private var started = false
+    /// Changes with every new question; an older question that is still speaking must not
+    /// start the microphone or clear the "searching" state of the newer one.
+    @State private var askGeneration = 0
 
     /// UI tests run without speech output or microphone.
     private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
@@ -172,15 +175,20 @@ struct AskView: View {
     /// Starts one question at a time (a spoken and a typed question must not run together).
     private func startAsking() {
         guard !isWorking else { return }
-        askTask = Task { await ask() }
+        // The previous question may still be speaking "見当たりません…" (isWorking is already false then).
+        askTask?.cancel()
+        voice.stop()
+        askGeneration += 1
+        let mine = askGeneration
+        askTask = Task { await ask(generation: mine) }
     }
 
-    private func ask() async {
+    private func ask(generation: Int) async {
         isWorking = true
         errorMessage = nil
         replyText = nil
         session = nil
-        defer { isWorking = false }
+        defer { if generation == askGeneration { isWorking = false } }
         let full = Answerer.followUpQuestion(previous: pendingQuestion, reply: question)
         // True when the reply was joined to the earlier question; false when it is a new question.
         let joined = full != question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -203,7 +211,7 @@ struct AskView: View {
                 guard voiceEnabled else { return }
                 // The reply ends with a question ("when was it?"), so listen for the answer right away.
                 await Speaker.shared.sayAndWait(first.text)
-                guard !Task.isCancelled, !voice.isListening else { return }
+                guard !Task.isCancelled, generation == askGeneration, !voice.isListening else { return }
                 await voice.start(onFinish: heardQuestion)
             } else {
                 pendingQuestion = nil

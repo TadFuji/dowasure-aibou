@@ -189,6 +189,14 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(retriever.dateRange(in: "3日前に行った店", today: today) == "2026-11-08"..."2026-11-10")
     }
 
+    @Test func followUpReplyCorrectsTheTime() {
+        let joined = Answerer.followUpQuestion(previous: "昨日会った人の名前", reply: "先週")
+        #expect(retriever.dateRange(in: joined, today: today) == "2026-11-02"..."2026-11-08")
+        // A reply without a time word keeps the time of the first question.
+        let kept = Answerer.followUpQuestion(previous: "昨日会った人の名前", reply: "駅前")
+        #expect(retriever.dateRange(in: kept, today: today) == "2026-11-11"..."2026-11-11")
+    }
+
     @Test func weeksAndMonths() {
         #expect(retriever.dateRange(in: "先週、駅前で会った人", today: today) == "2026-11-02"..."2026-11-08")
         #expect(retriever.dateRange(in: "今週の予定", today: today) == "2026-11-09"..."2026-11-12")

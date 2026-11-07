@@ -48,6 +48,12 @@ public struct Retriever: Sendable {
 
     /// Inclusive range of day keys implied by time words in the question, or nil if none.
     public func dateRange(in question: String, today: Date) -> ClosedRange<String>? {
+        // "昨日会った人の名前（先週）": the reply in brackets corrects the time, so it is read first.
+        if question.hasSuffix("）"), let open = question.lastIndex(of: "（") {
+            let reply = String(question[question.index(after: open)..<question.index(before: question.endIndex)])
+            let base = String(question[..<open])
+            return dateRange(in: reply, today: today) ?? dateRange(in: base, today: today)
+        }
         let cal = dayCalendar.calendar
         let todayStart = cal.startOfDay(for: today)
         func range(_ from: Date, _ to: Date) -> ClosedRange<String> {
