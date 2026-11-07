@@ -109,7 +109,12 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(reply.waitForExistence(timeout: 60))
         XCTAssertTrue(reply.label.hasPrefix("ヒントです"), reply.label)
         XCTAssertFalse(reply.label.contains("青山"), reply.label)
-        app.buttons["revealButton"].tap()
+        // The question was typed, so the keyboard is closing while the hint appears and the buttons
+        // move up. A tap during that movement was lost once (16:30 run), so wait for it to settle.
+        let revealButton = app.buttons["revealButton"]
+        XCTAssertTrue(revealButton.waitForExistence(timeout: 5))
+        _ = app.keyboards.firstMatch.waitForNonExistence(timeout: 5)
+        revealButton.tap()
         // The text changes a moment after the tap; wait for it instead of reading the old hint.
         let revealed = expectation(for: NSPredicate(format: "label CONTAINS %@", "の記録より："), evaluatedWith: reply)
         wait(for: [revealed], timeout: 5)
