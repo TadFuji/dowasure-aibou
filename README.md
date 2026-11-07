@@ -1,6 +1,6 @@
 # ど忘れ相棒
 
-**忘れそうなことをパッと話すと覚えてくれて、「何だっけな」の時は、答えではなくヒントで思い出させてくれる iPhone アプリ。**
+**忘れそうなことをパッと話すと覚えてくれて、「何だっけな」の時は、答えではなくヒントで、自分で思い出すのを手伝う iPhone アプリ。**
 
 ![iOS 26+](https://img.shields.io/badge/iOS-26%2B-1f2937)
 ![Swift 6](https://img.shields.io/badge/Swift-6-c2410c)
@@ -12,7 +12,72 @@
 > 「忘れてしまうだろうなと思ったことをパッと話して記憶してくれる。そして『何だっけな』と思い出すときに、答えを言うのではなくてヒントを言う。」
 > — 制作者・藤川（2026-11-03）
 
-Built with Claude: Japan 2026 の応募作品です。2026年11月2日から、期間中に新しく作りました。制作者の藤川（65歳）はプログラマーではありません。企画・実機での試用・判断を藤川が、設計・実装・テストを Claude Code が担当しています。
+**誰のためか**：スマホに慣れていない高齢の方。「さっき聞いた名前」「来週の約束」が、ふっと出てこない時のために。
+**どう作ったか**：Built with Claude: Japan 2026 の応募作品です。2026-11-02 から期間中に新しく作りました。制作者の藤川（65歳）はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テストを Claude Code が担当しました。
+
+## 3つの柱
+
+| 柱 | 藤川の言葉（2026-11-07） | アプリでは |
+|---|---|---|
+| **① とてもシンプル** | 「高齢者がスマホなどに慣れていなくても直感的に使えること、それが非常に重要です。」 | ホームの大きなボタンは2つだけ（「覚えておくことを話す」「あれ、何だっけ？」）と「設定」。押すものはすべて画面の下半分、上半分は読むものだけ |
+| **② 答えでなくヒント**（いちばん大事） | 「答えを教えるのではなくて思い出させるアシストをする ということ。そこが最も重要です。」 | ヒントは3段（場面 → 手がかり → 最初の1音）。答えはコードが点検し、漏れたヒントは捨てる。答えは本人が言い当てた時か、頼んだ時だけ |
+| **③ 1〜2年使える記録** | 「ユーザーは1〜2年使うことを想定して、（中略）どこに記録していくのかということも慎重に考えてください。」 | 記録は iPhone の中だけ。ご家族が控えを書き出せる。保存の場所が開けなくても落ちず、記録を消さない |
+
+## 答えでなく、ヒント（会話の例）
+
+```text
+利用者：駅前で会った人、名前なんだっけ
+相棒　：ヒントです。3日前、駅前の喫茶店でお会いした方です。思い出せたら、言ってみてください。
+利用者：……森山さん？
+相棒　：「森山さん」と聞こえました。記録の言葉とは少し違うようです。
+　　　　もう一つヒントです。前の職場でご一緒だった、丸い眼鏡の方です。
+利用者：あ、森田さん！
+相棒　：そうです！ご自分で思い出せましたね。
+　　　　11月4日の記録より：森田さんです。
+```
+
+架空の記録（[`SampleData.swift`](DowasureCore/Sources/DowasureCore/SampleData.swift)）での例です。「ヒントです」「と聞こえました」「そうです！ご自分で思い出せましたね」はアプリの決まった言葉（[`HintSession.swift`](DowasureCore/Sources/DowasureCore/HintSession.swift)）、ヒントの中身は Claude が毎回作ります。「◯月◯日の記録より」はアプリが組み立てます。
+
+## 数字で見る
+
+| 項目 | 結果 | 出典 |
+|---|---|---|
+| 答えのある質問に正しく答えた | **22 / 22** | 本物の Claude Haiku 5.5 で採点（2026-11-07、4回目） |
+| 記録に無い質問に「見当たりません」と答えた | **8 / 8** | 同上 |
+| ヒントに答えの言葉が入った（コードの点検） | **0 / 22** | 同上。出たヒントは全部、Claude も読んで確かめた |
+| 答えが出るまでの待ち時間 | 平均 4.3秒、最長 9.8秒 | 同上 |
+| 中核の単体テスト | **58件**（Mac で全件成功） | `DowasureCore/Tests`、2026-11-07 18:28 |
+| 画面の通しテスト | **6本**（本物の Claude を使う2本を含む。全件成功） | `UITests/`、2026-11-07 19:50 |
+| 声の中継所のテスト | 6件（成功） | `relay/speak.test.js` |
+
+採点の問題は架空の30問で、制作側が作ったものです。良く出すぎている恐れもあります（[限界](docs/採点.md)）。
+
+## 高齢者に使いやすくするために直したこと
+
+藤川（65歳）が実機で触り、感じたことを言葉にし、Claude Code がその場で直す。その繰り返しで、高齢の方に使いやすい形を探しました。[開発記録](docs/開発記録.md) には、**藤川の言葉83件**（そのままの言葉で）と、**うまくいかなかった案40件以上**を残しています。
+
+| 工夫 | 藤川の言葉 | どう変えたか | なぜ高齢の方に効くか |
+|---|---|---|---|
+| **長く待つ聞き取り** | 「何を話すか考えているうちに、元に戻ってしまいます」（11/03） | 約3秒で切れていた聞き取りを、話し始めるまで20秒待ち、話した後は4秒の間で区切るように | 話す前に考える時間が要る。途中で切られると、もう一度押す気力がなくなる |
+| **大きな「ホームにもどる」** | 「戻るボタンが左上の小さな矢印だけだと非常にわかりにくい」（11/03） | どの画面にも、文字で書いた大きなボタン | 小さな矢印は見えにくく、意味も伝わりにくい |
+| **親指が届く下半分のボタン** | 「親指はiPhoneに対して下半分しか使えません」（11/07） | 押すものはすべて画面の下半分。上半分は読むものだけ | 片手で持ったまま、持ち替えずに押せる。落とす心配も減る |
+| **大きな文字と、読みやすい色** | 「もっとUIをシンプルにわかりやすく、大きめに作ってください」（11/03） | 最大の文字サイズでもボタンの文字が切れない。白い文字の背景はコントラスト比4.5以上（iPhone 標準のオレンジ・緑は約2.2で使わない） | 年とともに、小さな文字や薄い色の差が読みにくくなる |
+| **色だけに頼らない** | 「シニアフリー」「ユニバーサルデザイン」（11/03） | 注意は赤い色だけでなく、印と言葉で示す | 色の見え方は人によって違う。言葉なら誰でも分かる |
+| **低くやさしい音** | 「ちょっと電子音っぽくて冷たさがありますね」「高齢者は高周波は聞こえないことも考慮してください」（11/03） | 待ち時間の音は 392Hz（ソ）の木琴のような音に響きを足し、すべて1kHz未満に | 高い音から聞こえにくくなる。冷たい音は不安にさせる |
+| **怖くない声** | 「ロボットぽくて怖い」「1980年代に戻ったような感じ」「5秒ほど黙る時間、非常に気になる」（11/03） | 声を何度も試して、Gemini の自然な声に。低め・ゆっくり・はっきり。よく使う言葉は録音して同梱し、待たせない | 怖い声や長い沈黙は「壊れた？」と感じさせ、使うのをやめてしまう |
+| **振動でも知らせる** | 「シニアフリー」「ユニバーサルデザイン」（11/03） | 聞き始めと終わりに、ブルっと振動 | 音が聞こえにくくても、今が話す番だと分かる |
+| **音量0でも使える** | 「いえ、音量が０でも使えるUIにしてください。」（11/07） | 音が出ない時は、すぐマイクに進み、「どうぞ、お話しください」を大きな枠で示す。「もう一度きく」を押せば、振動と文字で知らせ、音を上げたらすぐ読み上げる | 音量を下げたままの方は多い。設定を直してもらうより、そのままで使えるほうがいい |
+| **間違いは取り消せる** | 「シニアフリー」「ユニバーサルデザイン」（11/03） | 「いまのを取り消す」で、直前に覚えた1件を消せる | 聞き間違いや言い間違いが怖くなくなる |
+| **鍵は1つだけ** | 「Claude の API キーと（中略）Google の API キーの2つを入力させるというのは負担になると思うんですよね」（11/07） | 声の中継所を作り、利用者が入れる鍵を1つに | 長い文字列を2回打つのは、慣れない方には大きな壁 |
+
+いちばん大事な「答えでなくヒント」も、藤川の言葉「いきなり答えをポンと言うのではなく、まずはヒントを」（11/03）から生まれました。ヒントの決まりは本物の Claude で4回採点し、出たヒントを全部読んで3回直しています（[採点.md](docs/採点.md)）。決まりの全体とコードの場所は [docs/ユニバーサルデザイン.md](docs/ユニバーサルデザイン.md)。
+
+## 審査員の方へ
+
+- **5分で全体をつかむ**：[docs/審査員の方へ.md](docs/審査員の方へ.md)
+- **試行錯誤の跡**：[高齢者に使いやすくするために直したこと](#高齢者に使いやすくするために直したこと)、全記録は [docs/開発記録.md](docs/開発記録.md)（藤川の言葉を原文で、問題 → 原因 → 対応 → 結果、うまくいかなかった案も）
+- **Claude Code の使い分け**：[Claude Code との作り方](#claude-code-との作り方)、実物は [`.claude/`](.claude/)
+- **ヒントの作りの中心**：[`Prompts.swift`](DowasureCore/Sources/DowasureCore/Prompts.swift)（指示文）、[`Services.swift`](DowasureCore/Sources/DowasureCore/Services.swift) の `Answerer.verify`（点検）
 
 ---
 
@@ -21,24 +86,31 @@ Built with Claude: Japan 2026 の応募作品です。2026年11月2日から、�
 1. [誰の、何を助けるのか](#誰の何を助けるのか)
 2. [使い方の流れ](#使い方の流れ)
 3. [できること](#できること)
-4. [安心して使えるための作り](#安心して使えるための作り)
-5. [シニアフリー・ユニバーサルデザイン](#シニアフリーユニバーサルデザイン)
-6. [しくみ](#しくみ)
-7. [正確さの測り方](#正確さの測り方)
-8. [Claude Code との作り方](#claude-code-との作り方)
-9. [作りながら直したこと](#作りながら直したこと)
-10. [動かし方](#動かし方)
-11. [フォルダの中身](#フォルダの中身)
-12. [文書一覧](#文書一覧)
-13. [ライセンス](#ライセンス)
+4. [ヒントを出すしくみ](#ヒントを出すしくみ)
+5. [記録の保存（1〜2年使う前提）](#記録の保存12年使う前提)
+6. [安心とプライバシー](#安心とプライバシー)
+7. [シニアフリー・ユニバーサルデザイン](#シニアフリーユニバーサルデザイン)
+8. [しくみ](#しくみ)
+9. [Claude Code との作り方](#claude-code-との作り方)
+10. [藤川の声で変わったこと](#藤川の声で変わったこと)
+11. [動かし方とテスト](#動かし方とテスト)
+12. [まだ確かめていないこと](#まだ確かめていないこと)
+13. [フォルダと文書](#フォルダと文書)
+14. [English summary](#english-summary)
 
 ---
 
 ## 誰の、何を助けるのか
 
-年を重ねると、「さっき聞いた名前」「来週の約束」「買う物」が、ふっと出てこなくなります。メモを書けば済む話ですが、小さな文字を打つのは面倒で、書いた場所も忘れます。
+年を重ねると、名前や約束や買う物が、ふっと出てこなくなります。メモを書けば済む話ですが、小さな文字を打つのは手間で、書いた場所も忘れます。
 
-ど忘れ相棒は、**話すだけで覚えてくれる相棒**です。思い出したい時も、すぐに答えを言いません。**ヒントを出して、自分で思い出すのを手伝います。** 答えを聞くだけより、自分で思い出せた方がうれしい、という藤川の考えから、この形になりました。
+ど忘れ相棒は、**話すだけで覚えてくれる相棒**です。思い出したい時も、すぐに答えを言いません。答えを聞くだけより、自分で思い出せた方がうれしい、という藤川の考えからです。
+
+続けて使ってもらうための工夫：
+
+- **毎晩のお知らせ**：決めた時刻（最初は20時）に「忘れたくないことはありますか？」。押すと話す画面が開きます。
+- **Siri で一言**：「ど忘れ相棒で覚えて」「ど忘れ相棒で何だっけ」。アプリを探さずに始められます。
+- **励ましだけを見せる**：ヒントだけで言い当てると、ホームに「この1週間で、ご自分で◯回思い出せました。」。0回の時は何も出しません（採点されている感じを避けるため）。
 
 ## 使い方の流れ
 
@@ -50,7 +122,7 @@ sequenceDiagram
     participant C as Claude Haiku 5.5
 
     Note over U,A: 覚えておく
-    U->>A: 「覚えておくことを話す」を押して<br/>「4時に歯医者」と話す
+    U->>A: 「覚えておくことを話す」で<br/>「4時に歯医者」と話す
     A->>A: 話した言葉を時刻つきで iPhone に保存
     A-->>U: 「『4時に歯医者』ですね。覚えました。」
     A->>C: その日の言葉から、人・約束・場所・数字を抜き出す（裏で）
@@ -59,36 +131,71 @@ sequenceDiagram
     U->>A: 「あれ、何だっけ？」<br/>「駅前で会った人、名前なんだっけ」
     A->>A: 関係のありそうな日を、最大7日分だけ選ぶ
     A->>C: 選んだ日の記録と質問だけを送る（1回だけ）
-    C-->>A: 答え・弱いヒント・強いヒント・根拠の日付
+    C-->>A: 答え・ヒント3つ・正解とみなす言葉・根拠の日付
     A->>A: 根拠の日付を確かめ、答えの漏れたヒントを捨てる
-    A-->>U: 「ヒントです。駅前の喫茶店で会った方です。」
-    U->>A: 「青山さん？」
-    A-->>U: 「そうです！ 10月8日の記録より：青山さんです。」
+    A-->>U: 「ヒントです。駅前の喫茶店でお会いした方です。」
+    U->>A: 「森田さん？」
+    A-->>U: 「そうです！ 11月4日の記録より：森田さんです。」
 ```
 
-ヒントから答えまでの会話は iPhone の中だけで進みます。AI への問い合わせは最初の1回だけなので、2つ目のヒントや答えは待たずに出ます。
+AI への問い合わせは最初の1回だけです。2つ目のヒントや答えは、iPhone の中で待たずに出ます。
 
 ## できること
 
 | 機能 | 内容 |
 |---|---|
-| **覚えておくことを話す** | 押すと「覚えておきたいことを、話してください」と促します。時間帯に関係なく、何度でも話して記録できます。話した言葉をそのまま読み返すので、聞き間違いにも気づけます。「いまのを取り消す」で直前の1件を消せます。 |
-| **あれ、何だっけ？** | 声か文字で聞くと、まずヒントを出します。名前を言えば「そうです！」、違えば次のヒント。「答えを教えて」「わからない」で、根拠の日付つきの答えを伝えます。記録に無いことは「見当たりません」と答えます。 |
-| **自分で思い出せた記録** | ヒントだけで言い当てると、やさしいチャイムと振動で「そうです！ご自分で思い出せましたね。」。ホームに「この1週間で、ご自分で◯回思い出せました。」と出します。答えを聞いた回は数えず、0回の時は何も出しません。記録は iPhone の中だけです。 |
-| **Siri で一言** | 「ど忘れ相棒で覚えて」で話す画面、「ど忘れ相棒で何だっけ」で思い出す画面が開きます。設定は要りません。同じものを横のボタン（アクションボタン）にも割り当てられます。 |
-| **毎晩のお知らせ** | 決めた時刻（最初は20時）に「忘れたくないことはありますか？」と通知します。押すと、そのまま話す画面が開きます。 |
-| **自然な声** | Google の Gemini の音声で、低め・ゆっくり・はっきり話します。使えない時は自動で iPhone の声に切り替えます。AI が考えている間は、やさしい響きの低い「ポンポンポン」が鳴ります。 |
+| **覚えておくことを話す** | 時間帯に関係なく、何度でも話して記録。話した言葉をそのまま読み返すので、聞き間違いに気づけます。「いまのを取り消す」で直前の1件を消せます |
+| **あれ、何だっけ？** | 声か文字で聞くと、まずヒント。名前を言えば「そうです！」、違えば聞こえた言葉を伝えて次のヒント。「答えを教えて」で、根拠の日付つきの答え。記録に無いことは「見当たりません」と答え、いつ頃かを聞き返します |
+| **自分で思い出せた記録** | 言い当てた時は、低い2音のチャイムと振動。答えを聞いた回は数えません |
+| **Siri で一言** | 7つの言い方を登録（[`SiriShortcuts.swift`](App/SiriShortcuts.swift)）。同じものを横のボタン（アクションボタン）にも割り当てられます |
+| **毎晩のお知らせ** | 時刻は設定で変えられます |
+| **自然な声** | Gemini の声で、低め・ゆっくり・はっきり。使えない時は自動で iPhone の声に。音量が0でも、声を待たせずに文字と振動で進みます |
+| **記録の保管（ご家族向け）** | 記録をテキストで書き出す。すべて消す時は確認つき |
 
-## 安心して使えるための作り
+## ヒントを出すしくみ
 
-- **記録は iPhone の中だけに保存します。** 開発者のサーバーはありません。記録は iPhone の SwiftData（アプリ内のデータベース）に入ります。
-- **AI に送るのは必要な分だけです。** 抜き出しにはその日に話した言葉を、質問には関係のありそうな日（最大7日分）だけを、Anthropic の Claude API に送ります。
-- **根拠の日付は AI に書かせません。** AI が「根拠」と返した日付のうち、実際に AI へ渡した日だけを残し、「10月8日の記録より」の文言はアプリが組み立てます。根拠が残らなければ「見当たりません」と答えます。作り話を、仕組みで防いでいます。
-- **ヒントに答えが入っていたら捨てます。** 答えの言葉（漢字・かな）がヒントに入っていないかを、アプリが確かめます。
-- **鍵（API キー）は iPhone のキーチェーンに保存します。** このリポジトリにもアプリの中にも入れていません。コミット前の自動点検（[`.githooks/pre-commit`](.githooks/pre-commit)）が、鍵らしい文字列や `secrets/` のファイルを止めます。
-- **医療や診断は行いません。** 暮らしの助けとして使うアプリです。
+AI に任せるのは「言葉づくり」だけです。答えを漏らさないこと、根拠の日付、ヒントから答えへの進め方は、アプリのコードが決めます。
 
-どこに何を送り、何を保存するかの全体は [docs/プライバシーと安全.md](docs/プライバシーと安全.md) にまとめています。
+| 段階 | だれが | 何をするか |
+|---|---|---|
+| 1. 候補日を選ぶ | コード（[`Retriever.swift`](DowasureCore/Sources/DowasureCore/Retriever.swift)） | 時期の言葉（昨日、先月、去年の夏…）で範囲を決め、名前・文字の重なりで順位を付けて最大7日。AI は使わない |
+| 2. ヒントと答えを作る | Claude Haiku 5.5（[`Prompts.swift`](DowasureCore/Sources/DowasureCore/Prompts.swift)） | 決まった形（JSON スキーマの構造化出力）で、ヒント3段・答え・正解とみなす言葉（漢字と読み）・根拠の日付を一度に返す |
+| 3. 点検する | コード（`Answerer.verify`） | 根拠の日付は「実際に AI へ渡した日」だけ残す。残らなければ「見当たりません」。答えの言葉が入ったヒントは捨てる。「◯月◯日の記録より」はコードが組み立てる |
+| 4. 進める | コード（[`HintSession.swift`](DowasureCore/Sources/DowasureCore/HintSession.swift)） | 空白・「さん」・ひらがなとカタカナの違いを無視して、言い当てたかを端末内で判定 |
+
+**ヒントの3段**：① 場面（いつ・どこで）② 手がかり（特徴・間柄）③ 最初の1音（数字なら桁数と最初の数字）。答えの2文字以上、読み、言い換えは禁止と指示文に書いてあります。
+
+**ヒントの決まりは採点で4回直しました**（2026-11-07）。コードの点検は4回とも漏れ0件でしたが、出たヒントを全部読むと、言い換えの漏れが見つかりました。
+
+| 回 | 見つかったこと | 直したこと |
+|---|---|---|
+| 1 | 考える量（effort）を low にすると速い（平均2.4秒）が、「雪のような色」（白）と言い換えで答えを言う | 考える量は既定のまま |
+| 2 | 数のヒントが「4けたの数字です」だけで弱い | 桁数と最初の数字の両方を言う |
+| 3 | 答えが1けたの時、「最初の数字は『はち』」が答えそのもの | 1けたの時は最初の数字を言わない |
+| 4 | 正答 22/22、作り話 0、漏れは見つからず | 残る弱点は開発記録の「これからやること」に記載 |
+
+## 記録の保存（1〜2年使う前提）
+
+| 心配 | 作り | コード |
+|---|---|---|
+| どこに保存するか | iPhone の中の SwiftData（アプリ内のデータベース）。1日1件。中身は JSON で持つので、あとで記録の形を変えても読み替えやすい | [`Storage.swift`](App/Storage.swift) の `StoredDay` |
+| 抜き出しに失敗したら | 話した言葉は先に保存し、人・約束などのまとめは後から足す。まとめが失敗しても言葉は残る | [`TalkView.swift`](App/TalkView.swift) |
+| 紛失・故障に備える | 設定 →「記録の保管（ご家族向け）」→「記録を書き出す（◯日分）」。古い日から「話したこと」と「まとめ」を並べたテキスト（`ど忘れ相棒の記録_日付.txt`）を、ファイル App・AirDrop・メールで残せる | [`RecordExport.swift`](DowasureCore/Sources/DowasureCore/RecordExport.swift) |
+| 機種変更 | iPhone の iCloud バックアップ（または直接転送）で記録も移る。iCloud 同期は入れていない（記録を端末の外に置かないため）。鍵は「この iPhone だけ」なので入れ直す | `project.yml` に iCloud の権限なし |
+| 保存の場所が開けない時 | 落ちずに起動し、「これまでの記録を開けませんでした。記録は消していません。」と伝える。記録のファイルは消さない | [`DowasureApp.swift`](App/DowasureApp.swift) |
+| 間違えて消す | 「すべての記録を消す」は設定のさらに奥。消す前に書き出すよう書き添え、確認に日数を出す | [`SettingsView.swift`](App/SettingsView.swift) |
+| 何年分も経つと探せない | 「去年」「3か月前」「半年前」「5月に」「夏ごろ」「去年の冬」で探せる。声の聞き取りが返す漢数字（「三か月前」）も読む | `Retriever.swift` |
+| 記録が増えると重い・高い | 質問1回で送るのは最大7日分なので、記録が増えても送る量は増えない。見積もりでは、多めに1日2,000文字でも2年で約4.4MB | [開発記録](docs/開発記録.md) 11/07 16:14 |
+
+## 安心とプライバシー
+
+- **記録は iPhone の中だけ。** 開発者のサーバーに記録はありません。
+- **AI に送るのは必要な分だけ。** 抜き出しにはその日の言葉、質問には候補日（最大7日分）だけを Claude API に送ります。
+- **鍵はキーチェーンに。** Claude の鍵は利用者が設定で1つ入れるだけ。リポジトリにもアプリにも鍵は入れていません。
+- **医療や診断は行いません。** ホーム画面にも「このアプリは暮らしの助けです。医療や診断は行いません。」と書いています。
+- **Managed Agents は使いません。** 会話がサーバー側に保存される仕組みなので、記録を端末の外に置かない約束と合いません。
+
+どこに何を送り、何を保存するかの全部は [docs/プライバシーと安全.md](docs/プライバシーと安全.md)。
 
 ## シニアフリー・ユニバーサルデザイン
 
@@ -96,12 +203,12 @@ sequenceDiagram
 
 | 決まり | 具体的に |
 |---|---|
-| 音は低く | 待ち時間の音は 392Hz（ソ）。倍音を含めて1kHz未満 |
+| ボタンは下半分に | 「親指はiPhoneに対して下半分しか使えません」（藤川）。押すものは下の帯（`ThumbDock`）に集め、いちばん下に大きな「ホームにもどる」 |
+| 音は低く | 待ち時間の「ポンポンポン」は 392Hz（ソ）。倍音を含めて1kHz未満 |
 | 声は低め・ゆっくり・はっきり | Gemini への指示と、iPhone の声の高さ（0.9倍） |
-| 文字とボタンは大きく | どの画面にも大きな「ホームにもどる」。最大の文字サイズでもボタンの文字が切れない |
-| 色の読みやすさ | 白い文字の背景はコントラスト比4.5以上（濃いオレンジ5.3、濃い緑5.5、濃い赤5.9） |
-| 色だけに頼らない | 注意は赤い文字だけでなく、印と言葉で示す |
-| 音だけに頼らない | 話した言葉・答えは必ず文字でも表示。聞き始めと終わりは振動でも知らせる |
+| 文字は大きく、切れない | 最大の文字サイズでもボタンの文字を折り返す（`wrapsForLargeText()`） |
+| 色の読みやすさ | 白い文字の背景はコントラスト比4.5以上（`Palette`。濃いオレンジ5.3、濃い緑5.5、濃い赤5.9） |
+| 色や音だけに頼らない | 注意は印と言葉で（`WarningText`）。声で言ったことは必ず文字でも。聞き始めと終わりは振動でも |
 | 考える時間を待つ | 話し始めるまで20秒待つ。話し始めてからは4秒の間で区切る |
 | 間違いは取り消せる | 「いまのを取り消す」 |
 
@@ -111,9 +218,9 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    subgraph iPhone["iPhone（記録はここだけ）"]
+    subgraph Phone["iPhone（記録はここだけ）"]
         direction TB
-        UI["画面（SwiftUI）<br/>App/"]
+        UI["画面 SwiftUI<br/>App/"]
         Voice["声の入力と読み上げ<br/>Voice.swift"]
         Store[("記録<br/>SwiftData")]
         Key[("鍵<br/>キーチェーン")]
@@ -121,76 +228,59 @@ flowchart LR
             direction TB
             Ret["Retriever<br/>候補日を端末内で絞る"]
             Svc["Recorder / Answerer<br/>AI に頼み、答えを確かめる"]
-            Hint["HintSession<br/>ヒント→答えを端末内で進める"]
+            Hint["HintSession<br/>ヒントから答えへ端末内で進める"]
         end
         UI --- Voice
         UI --- Store
         UI --- Key
         UI --- Core
     end
-    Svc -- "その日の言葉 / 候補日の記録と質問" --> Claude["Anthropic<br/>Claude API<br/>Haiku 5.5"]
-    Voice -- "読み上げる文" --> Relay["声の中継所<br/>relay/（Google の鍵はここだけ）"]
-    Relay -- "読み上げる文" --> Gemini["Google<br/>Gemini TTS"]
-    Voice -. "聞き取り（できるだけ端末内）" .-> Speech["Apple<br/>音声認識"]
+    Svc -- "その日の言葉 / 候補日の記録と質問" --> Claude["Anthropic Claude API<br/>Haiku 5.5"]
+    Voice -- "読み上げる文" --> Relay["声の中継所 relay/<br/>Google の鍵はここだけ"]
+    Relay -- "読み上げる文" --> Gemini["Google Gemini TTS"]
+    Voice -. "聞き取り（できるだけ端末内）" .-> Speech["Apple 音声認識"]
 ```
 
-- AI の答えは、決まった形（JSON スキーマによる構造化出力）で受け取ります。
-- 決まった指示文（システムプロンプト）は固定にして、プロンプトキャッシュが効くようにしています。
-- 自律的に動くエージェントではなく、手順の決まったワークフロー型です（Anthropic の「Building Effective Agents」の考え方に合わせました）。
+- 自律的に動くエージェントではなく、手順の決まったワークフロー型です（Anthropic の「Building Effective Agents」の「まず一番簡単な方法で」に合わせました）。
+- 固定の指示文に `cache_control` を付け、プロンプトキャッシュを効かせています。
+- 中核（`DowasureCore`）は Swift Package で、iPhone が無くても Mac でテストできます。
 
 部品ごとの説明は [docs/設計.md](docs/設計.md)。
 
-## 正確さの測り方
-
-架空の高齢者の記録25日分と、質問30問で採点しています。30問のうち8問は、記録に答えが無い質問です。眼鏡の人が2人、似た名前（田村さん・村田さん）、変更された約束などの「ひっかけ」も入れました。
-
-2026-11-03 の結果（Claude Haiku 5.5、本物の API）：
-
-| 測ったこと | 結果 |
-|---|---|
-| 答えられる質問の正答 | 22問中22問 |
-| 記録に無い質問に「見当たりません」と答えた | 8問中8問 |
-| 正答にヒントが付いた | 22問中22問 |
-| ヒントに答えが漏れた | 22問中0問 |
-
-正直に書いておくと、この採点データは制作側（Claude）が作ったもので、問題数も少なめです。このデータを見ながら検索を直したので、実際より良い点が出ている恐れがあります。藤川の実際の記録で確かめ直す予定です。採点の方法は [docs/採点.md](docs/採点.md)。
-
 ## Claude Code との作り方
 
-藤川がコードを書かずに作るため、Claude Code の機能を役割ごとに使い分けています。
+藤川がコードを書かずに作るため、Claude Code の機能を役割ごとに分けました。**作る役と、別の目で見る役を分ける**のが基本です。
 
-| 使ったもの | 何に使ったか |
-|---|---|
-| 本体のエージェント | 設計、実装、テスト、統合、藤川とのやり取り |
-| サブエージェント | 採点テスト一式の作成、公開前の秘密情報の独立点検、音声合成の仕様調査。[`.claude/agents/`](.claude/agents/) に4人の係（高齢の利用者役・ヒント漏れの審査員・iOS 技術者・大会の審査員）を置き、作った本人と別の目で見る |
-| スキル | [`.claude/skills/`](.claude/skills/)：開発記録の書き方、公開前の点検 |
-| MCP（iOS シミュレーター操作） | 画面を撮影・タップして、見た目と動きを確認 |
-| ブラウザ操作 | 料金表などを公式ページで確認 |
-| フック（git の pre-commit） | 鍵や個人の記録がコミットされるのを自動で止める |
-| フック（Claude Code、[`.claude/settings.json`](.claude/settings.json)） | 書き込む前に鍵を止める、公開の切り替えは確認を出す、アプリの文に医療めいた言葉が入ったら知らせる、終える前にテストと開発記録の追記を確かめる |
-| `CLAUDE.md` | 目的・守ること・既知の問題を書き、どのセッションでも同じ決まりで作る |
-| プロジェクトの並行スレッド | アプリの制作、調査、このリポジトリの整備を、別々のスレッドで並行して進める |
+| 種類 | 実物 | 何をするか |
+|---|---|---|
+| **説明書** | [`CLAUDE.md`](CLAUDE.md) | 目的（藤川の言葉）、守ること（音は1kHz未満、ボタンは下半分、医療の言葉は使わない…）、既知の問題。どのセッションも同じ決まりで作る |
+| **スキル** | [`dev-log`](.claude/skills/dev-log/SKILL.md) | 開発記録の書き方（問題 → 原因 → 対応 → 結果、藤川の言葉は原文） |
+| | [`pre-publish-check`](.claude/skills/pre-publish-check/SKILL.md) | 公開へ戻す前の点検手順（鍵・本物の記録・実名） |
+| **サブエージェント**（読むだけの道具に限定） | [`elder-user-reviewer`](.claude/agents/elder-user-reviewer.md) | 70代でスマホに不慣れな利用者になりきり、迷う所・読めない所・怖い言葉を指摘 |
+| | [`hint-leak-judge`](.claude/agents/hint-leak-judge.md) | ヒントが答えを漏らしていないかを判定。コードの文字一致では見つからない言い換えを探す |
+| | [`ios-reviewer`](.claude/agents/ios-reviewer.md) | 落ちる・固まる・音が鳴り続ける不具合を探す |
+| | [`hackathon-judge`](.claude/agents/hackathon-judge.md) | 大会の配点どおりに採点し、直し方を出す |
+| **フック**（[`settings.json`](.claude/settings.json)） | [`guard_secrets.py`](.claude/hooks/guard_secrets.py) | 書き込む前に、鍵と `secrets/`・`private-data/` を止める |
+| | [`guard_publish.py`](.claude/hooks/guard_publish.py) | リポジトリの公開切り替えと強制 push には確認を出す（取り消せない操作のため） |
+| | [`check_wording.py`](.claude/hooks/check_wording.py) | アプリの文に「脳トレ」「認知機能」などが入ったら知らせる |
+| | [`finish_check.py`](.claude/hooks/finish_check.py) | 終える前に、中核を変えていれば `swift test`。開発記録の追記漏れも知らせる |
+| **MCP** | iOS シミュレーター操作 | 画面を撮影・タップして、見た目と動きを確かめる |
+| **並行スレッド** | プロジェクトのスレッド | 制作・調査・リポジトリ整備を別々に進め、最後はまとめ役が1本の PR にまとめる |
+| **git フックと CI** | [`.githooks/pre-commit`](.githooks/pre-commit)、[`secret-scan.yml`](.github/workflows/secret-scan.yml) | コミット前とプッシュのたびに、鍵らしい文字列・秘密のフォルダ・文書のリンク切れを点検 |
+
+使ってみて分かったこと（[docs/開発記録.md](docs/開発記録.md) より）：
+
+- 2026-11-07 午前、3つの立場のサブエージェントを同時に動かしてレビューし、撮影中に失敗しそうな不具合を4つ見つけました。よく効いたので、同じ立場を係として `.claude/agents/` に固定しました。
+- 終える前のフックは、作った直後に自分の不具合（日本語のファイル名を見つけられない）を見つけました。
+- アプリの中の AI も同じ考えです。答えが合っているかや日付はコードで確かめ、AI の言葉をそのまま信じません。
 
 失敗した使い方も含めた詳しい記録は [docs/Claude活用.md](docs/Claude活用.md)。
 
-## 作りながら直したこと
+## 藤川の声で変わったこと
 
-藤川が実機で使った感想で、作りが大きく変わりました。一部を抜き出します。
+藤川の言葉と、それで何を変えたかの一覧は、冒頭の「[高齢者に使いやすくするために直したこと](#高齢者に使いやすくするために直したこと)」にまとめています。時系列の全記録（問題 → 原因 → 対応 → 結果、うまくいかなかった案も）は [docs/開発記録.md](docs/開発記録.md) にあります。
 
-| 藤川の声 | 変えたこと |
-|---|---|
-| 「何を話すか考えているうちに、元に戻ってしまいます」 | 話し始めるまで20秒待つ |
-| 「戻るボタンが左上の小さな矢印だけだと非常にわかりにくい」 | 大きな「ホームにもどる」 |
-| 「1980年代に戻ったような感じがします。2026年風にしてください」 | Gemini の自然な声に |
-| 「5秒ほど黙る時間、非常に気になる」 | 決まり文句の保存、届いた分から話す、待ち時間の音 |
-| 「相槌が非常に不自然ですね」 | 相づちをやめ、言葉でない「ポンポンポン」に |
-| 「いきなり答えをポンと言うのではなく、まずはヒントを」 | ヒントから思い出す作りに全面変更 |
-| 「高齢者は高周波は聞こえないことも考慮してください」 | 音を低く、声を低め・ゆっくりに |
-| 「親指はiPhoneに対して下半分しか使えません」 | ボタンはすべて画面の下半分へ。上半分は読むものだけ |
-
-時系列の全記録（問題 → 原因 → 対応 → 結果、うまくいかなかった案も）は [docs/開発記録.md](docs/開発記録.md) にあります。
-
-## 動かし方
+## 動かし方とテスト
 
 必要なもの：Xcode 26 以降の Mac、[XcodeGen](https://github.com/yonaskolb/XcodeGen)、iOS 26 以降の iPhone（声の確認は実機で行います）。
 
@@ -199,56 +289,57 @@ git clone https://github.com/TadFuji/dowasure-aibou.git
 cd dowasure-aibou
 git config core.hooksPath .githooks   # 鍵のコミットを止める点検を有効にする
 
-# 中核部分のテスト（Mac だけで動く。通信しない）
-cd DowasureCore && swift test && cd ..
+cd DowasureCore && swift test && cd ..   # 中核のテスト（Mac だけで動く。通信しない）
 
-# アプリを作る
-xcodegen generate
+xcodegen generate                        # .xcodeproj を作る（コミットしない）
 open DowasureAibou.xcodeproj
 ```
 
-アプリを起動したら、設定画面で **Claude API の鍵を1つだけ** 入れます（[Anthropic Console](https://console.anthropic.com/) で作成）。
+アプリを起動したら、設定の「はじめの準備（ご家族向け）」で **Claude API の鍵を1つだけ** 入れます（[Anthropic Console](https://console.anthropic.com/) で作成）。
 
-自然な声のための Google の鍵は、利用者には入れてもらいません。作者が置いた「声の中継所」（`relay/`、Vercel で動く小さなサーバー）が鍵を持ち、読み上げる文を Gemini に取り次ぎます。中継所は文を保存せず、決まったモデル・声・長さ（400文字まで）の頼みだけを通します。中継所が使えない時は、自動で iPhone の声で話します。中継所は鍵なしで呼べるので、使いすぎを防ぐ上限を置いています（相手ごとに1時間20回、全体で1時間60回）。さらに Google 側の1日の枠（1モデル1日100回）を超えると断られるため、費用は増え続けません。枠を使い切った日は、同梱の録音と iPhone の声で話し続けます。よく使う決まった言葉は、Gemini の声で録ってアプリに同梱しています（`App/Resources/Voice`）。
-
-中継所を自分で立てる場合は、`relay/` を Vercel に置き、環境変数 `GEMINI_API_KEY` に有料の Gemini API の鍵（[Google AI Studio](https://aistudio.google.com/)）を入れ、`CloudVoice.relayEndpoint` をその URL に変えます。
-
-鍵はキーチェーンに保存され、ファイルには残りません。
-
-### テスト
+自然な声のための Google の鍵は、利用者には入れてもらいません。作者が置いた「声の中継所」（[`relay/`](relay/)、Vercel で動く小さなサーバー）が鍵を持ち、読み上げる文を Gemini に取り次ぎます。中継所は文を保存せず、決まったモデル・声・400文字までの頼みだけを通します。使いすぎを防ぐ上限（相手ごとに1時間20回、全体で1時間60回）があり、Google 側の1日の枠を超えると断られるので、費用は増え続けません。中継所が使えない時は、同梱の録音（[`App/Resources/Voice`](App/Resources/Voice)）と iPhone の声で話します。自分で立てる場合は `relay/` を Vercel に置き、環境変数 `GEMINI_API_KEY` に有料の Gemini API の鍵を入れ、`CloudVoice.relayEndpoint` をその URL に変えます。
 
 | 種類 | 実行 | 内容 |
 |---|---|---|
-| 単体テスト | `cd DowasureCore && swift test` | 35件。検索、答えの検証、ヒントの進め方、待ち時間など（AI は模擬の応答） |
-| 採点（検索だけ） | `cd DowasureCore && swift run DowasureEval` | 通信なし。正解の日を候補に拾えたか |
-| 採点（本物の AI） | `cd DowasureCore && swift run DowasureEval --live` | 鍵を `secrets/anthropic_api_key` に置いた時だけ |
-| 画面の通しテスト | `xcodebuild test -scheme DowasureAibou ...` | 6本。記録→取り消し、鍵の保存、お知らせ、ヒント→答えなど |
+| 単体テスト（58件） | `cd DowasureCore && swift test` | 検索、答えの点検、ヒントの進め方、時期の言葉、書き出し、待ち時間など（AI は模擬の応答） |
+| 採点（検索だけ） | `cd DowasureCore && swift run DowasureEval` | 通信なし。正しい日が候補に入った 22/22、1位で当たった 21/22 |
+| 採点（本物の AI） | `cd DowasureCore && swift run DowasureEval --live` | 鍵を `secrets/anthropic_api_key` に置いた時だけ。`--effort` で考える量を切り替え |
+| 画面の通しテスト（6本） | `xcodebuild test -project DowasureAibou.xcodeproj -scheme DowasureAibou -destination 'platform=iOS Simulator,id=<機種のid>'` | 記録と取り消し、鍵の保存、お知らせ、ヒントから答え、本物の Claude での答え |
+| 中継所のテスト（6件） | `cd relay && node --test` | 決まった頼みだけ通す、鍵が無い時は Google を呼ばない、回数の上限 |
 
-## フォルダの中身
+採点の作り方と限界は [docs/採点.md](docs/採点.md)。
+
+## まだ確かめていないこと
+
+やっていないことは、やったと書きません。
+
+- 藤川の実際の記録での採点（採点データは架空の30問で、合わせ込みの恐れがある）。
+- 実機での確認：Siri の言い方、毎晩のお知らせ（シミュレーターでは通知の許可が出ない）、着信で音が止まるか。
+- 藤川以外の高齢の方による試用と、VoiceOver での通しの操作。
+
+## フォルダと文書
 
 ```text
 .
-├── App/                  画面（SwiftUI）、声、保存、毎晩のお知らせ
+├── App/                  画面（SwiftUI）、声、保存、毎晩のお知らせ、Siri
 ├── DowasureCore/         中核（Swift Package。Mac でテストできる）
-│   ├── Sources/DowasureCore/   Claude API、検索、答えの検証、ヒント、Gemini の声
+│   ├── Sources/DowasureCore/   Claude API、検索、答えの点検、ヒント、書き出し
 │   ├── Sources/DowasureEval/   採点ツール
 │   ├── Tests/                  単体テスト
-│   └── Fixtures/               架空の記録と採点用の質問
+│   └── Fixtures/               架空の記録25日と採点用の質問30問
 ├── UITests/              画面の通しテスト
+├── relay/                声の中継所（Vercel）
 ├── docs/                 開発記録・設計・プライバシーなど
-├── .claude/skills/       Claude Code 用のスキル（開発記録の追記、公開前の点検）
-├── .claude/agents/       Claude Code の係（高齢の利用者役、ヒント漏れの審査員、iOS 技術者、大会の審査員）
-├── .claude/hooks/        Claude Code のフック（鍵・公開・医療めいた言葉・終える前の確認）
-├── .github/              Issue と PR のひな形、秘密情報の自動点検
+├── .claude/              Claude Code のスキル・サブエージェント・フック
+├── .github/              Issue と PR のひな形、秘密情報とリンク切れの自動点検
 ├── .githooks/pre-commit  鍵のコミットを止める点検
 ├── project.yml           Xcode のプロジェクト定義（XcodeGen）
-└── CLAUDE.md             Claude Code への説明書（目的・守ること・既知の問題）
+└── CLAUDE.md             Claude Code への説明書
 ```
-
-## 文書一覧
 
 | 文書 | 内容 |
 |---|---|
+| [docs/審査員の方へ.md](docs/審査員の方へ.md) | 審査の観点ごとの近道 |
 | [docs/開発記録.md](docs/開発記録.md) | 時系列の全記録。藤川の言葉、問題と対応、あきらめた案 |
 | [docs/設計.md](docs/設計.md) | 部品の役割と、データの流れ |
 | [docs/プライバシーと安全.md](docs/プライバシーと安全.md) | どこに何を送り、何を保存するか |
@@ -257,18 +348,20 @@ open DowasureAibou.xcodeproj
 | [docs/Claude活用.md](docs/Claude活用.md) | Claude Code の機能をどう使い分けたか |
 | [SECURITY.md](SECURITY.md) | 問題を見つけた時の連絡先 |
 
-## ライセンス
-
 [MIT ライセンス](LICENSE)です。
 
-<details>
-<summary>English summary</summary>
+## English summary
 
-**Dowasure Aibou** ("tip-of-the-tongue buddy") is an iPhone app for older adults, built for Built with Claude: Japan 2026. You say what you might forget ("dentist at 4", "buy carrots"); it saves your own words on the device. When you later ask "what was it again?", it does not blurt out the answer. It gives a hint first and lets you recall it yourself; the answer, with the date of the record it came from, comes when you name it or ask for it.
+**Dowasure Aibou** ("tip-of-the-tongue buddy") is an iPhone app for older adults who are not used to smartphones, built from scratch for Built with Claude: Japan 2026 (from 2026-11-02). The maker, Fujikawa (65), is not a programmer and wrote no code. He planned it and tested it on his own iPhone; Claude Code designed, built and tested everything.
 
-- Records stay on the iPhone (SwiftData). Only the relevant days (up to 7) are sent to the Claude API (Claude Haiku 5.5) with structured outputs.
-- Evidence dates are verified in code against the records actually sent; hints that leak the answer are dropped in code.
-- Senior-friendly design throughout: low-pitched sounds (< 1 kHz), large text that never truncates, contrast ≥ 4.5:1, haptics, undo.
-- The maker (65, not a programmer) never wrote code; Claude Code designed, built and tested everything. See `docs/開発記録.md` for the full log.
+**What it does.** You say what you might forget ("dentist at 4", "buy carrots"); the app saves your own words, with the time, on the device. When you later ask "what was it again?", it does not give the answer. It gives up to three hints (the scene, then a clue, then the first sound) so you can recall it yourself. The answer, with the date of the record, comes only when you name it or ask for it.
 
-</details>
+**How the hints stay honest.** One call to Claude Haiku 5.5 per question, with structured outputs (JSON schema) and prompt caching. Code does the rest: on-device retrieval picks at most 7 days to send; `Answerer.verify` keeps only evidence dates that were actually sent (otherwise "not found") and drops any hint that contains the answer; the "from the record of Nov 4" wording is built in code; guesses are matched on the device. A workflow, not an autonomous agent.
+
+**Results.** Live eval on 30 fictional questions: 22/22 correct, 8/8 "not found" for questions with no record, 0/22 hints leaking the answer by the code check (every hint was also read by Claude; the hint rules were revised four times after paraphrase leaks were found). 58 core unit tests and 6 UI tests, all passing on a Mac on 2026-11-07. The eval set is small and was written by the maker's side, so it may be optimistic.
+
+**Built for one to two years of use.** Records live only on the iPhone in SwiftData (one row per day, stored as JSON); no server, no iCloud sync. Spoken words are saved first, so a failed summary never loses them. The family can export all records as a text file. If the store cannot be opened, the app still starts, says so, and never deletes the file. Search understands "last year", "three months ago" and seasons.
+
+**Senior-friendly throughout.** Buttons only in the lower half (thumb reach), low-pitched sounds under 1 kHz, slow and low voice, text that never truncates at the largest size, contrast of 4.5:1 or more, warnings with icon and words, haptics, undo, and it works with the volume at zero. Not a medical app: no diagnosis or treatment claims.
+
+**How Claude Code was used.** `CLAUDE.md` holds the goal and rules; two skills (dev log, pre-publish check); four read-only subagents that review from a different seat than the builder (elderly user, hint-leak judge, iOS reviewer, hackathon judge); four hooks (block secrets before writing, confirm before making the repo public or force-pushing, flag medical wording, run tests and check the dev log before stopping); an iOS Simulator MCP; parallel threads merged by one coordinator. The full, honest log, including what failed, is in `docs/開発記録.md` (Japanese).
