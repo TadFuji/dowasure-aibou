@@ -1,6 +1,7 @@
 import AVFoundation
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 import DowasureCore
 
 /// Settings. Items the user changes (reminder, voice) come first in large type;
@@ -9,14 +10,21 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @State private var apiKey = APIKeyStore.load()
     @State private var keyMessage: String?
+    /// Result of trying the saved key once (so a mistyped key is found now, not when the user asks something).
+    @State private var keyCheckMessage: String?
+    @State private var keyCheckOK = false
     @State private var message: String?
     @State private var confirmDelete = false
+    /// Read when the settings open (not on every redraw), for the export button.
+    @State private var exportRecords: [DayRecord] = []
+    @State private var deleteMessage: String?
     @State private var showSetup = false
-    @State private var voiceKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
-    @State private var voiceKeyMessage: String?
+    /// Height of the settings list, to start the items lower on the screen.
+    @State private var formHeight: CGFloat = 0
+    /// The key field; the keyboard is closed on saving so "保存しました。" is not hidden behind it.
+    @FocusState private var keyFieldFocused: Bool
     @AppStorage(Speaker.cloudVoiceKey) private var cloudVoiceName = CloudVoice.defaultVoiceName
     @AppStorage(Speaker.voiceModeKey) private var voiceMode = "cloud"
-    private var hasCloudVoiceKey: Bool { !voiceKey.isEmpty && voiceKeyMessage != "保存できませんでした。" }
     @AppStorage("speechSpeed") private var speechSpeed = "slow"
     @AppStorage(Speaker.voiceKey) private var voiceIdentifier = ""
     @AppStorage(EveningReminder.enabledKey) private var reminderEnabled = false
@@ -39,7 +47,19 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        // The reader lets the list move to "保存しました。" after saving (it was left under the bottom area).
+        ScrollViewReader { proxy in
         Form {
+            // The settings start from the middle of the screen, within reach of the right thumb
+            // (藤川さん, 2026-11-07). Above them, only a short note to read.
+            Section {
+                Text("項目は画面の下の方から並んでいます。指で上へずらすと、続きが出てきます。")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.clear)
+                    .accessibilityIdentifier("settingsGuide")
+            }
             Section {
                 Toggle("毎晩お知らせする", isOn: $reminderEnabled)
                     .font(.title2.bold())
@@ -56,15 +76,14 @@ struct SettingsView: View {
             }
 
             Section {
-                if hasCloudVoiceKey {
-                    Picker("声の種類", selection: $voiceMode) {
-                        Text("自然な声").tag("cloud")
-                        Text("すぐ話す声").tag("device")
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: voiceMode) { _, _ in Speaker.shared.say("今日も一日、おつかれさまでした。") }
+                // The natural voice needs no key of its own: it goes through the maker's relay (2026-11-07).
+                Picker("声の種類", selection: $voiceMode) {
+                    Text("自然な声").tag("cloud")
+                    Text("すぐ話す声").tag("device")
                 }
-                if hasCloudVoiceKey && Speaker.shared.usesCloudVoice {
+                .pickerStyle(.segmented)
+                .onChange(of: voiceMode) { _, _ in Speaker.shared.say("今日も一日、おつかれさまでした。") }
+                if voiceMode != "device" {
                     ForEach(CloudVoice.voices, id: \.name) { item in
                         Button {
                             cloudVoiceName = item.name
@@ -80,6 +99,7 @@ struct SettingsView: View {
                             }
                         }
                         .foregroundStyle(.primary)
+                        .accessibilityAddTraits(item.name == cloudVoiceName ? .isSelected : [])
                     }
                 } else {
                 ForEach(voices, id: \.identifier) { voice in
@@ -100,6 +120,7 @@ struct SettingsView: View {
                         }
                     }
                     .foregroundStyle(.primary)
+                    .accessibilityAddTraits(voice.identifier == currentVoiceID ? .isSelected : [])
                 }
                 }
                 Picker("速さ", selection: $speechSpeed) {
@@ -117,31 +138,39 @@ struct SettingsView: View {
                 DisclosureGroup(isExpanded: $showSetup) {
                     SecureField("APIキー（sk-ant-…）", text: $apiKey)
                         .textContentType(.password)
+                        .submitLabel(.done)
+                        .focused($keyFieldFocused)
                         .accessibilityIdentifier("apiKeyField")
                     Button("APIキーを保存する") {
+                        keyFieldFocused = false
+                        apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
                         keyMessage = APIKeyStore.save(apiKey) ? "保存しました。" : "保存できませんでした。"
+                        if keyMessage == "保存しました。" { Task { await checkKey() } }
+                        // Once the keyboard has gone down, bring the result to the middle of the list.
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(500))
+                            withAnimation { proxy.scrollTo("keyResult", anchor: .center) }
+                        }
                     }
                     .accessibilityIdentifier("saveKeyButton")
                     if let keyMessage {
                         Label(keyMessage, systemImage: keyMessage == "保存しました。" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(keyMessage == "保存しました。" ? Palette.green : Palette.red)
                             .accessibilityIdentifier("keyMessage")
+                            .id("keyResult")
                     }
-                    SecureField("自然な声のキー（Google AI Studio）", text: $voiceKey)
-                        .textContentType(.password)
-                    Button("自然な声のキーを保存する") {
-                        voiceKeyMessage = APIKeyStore.save(voiceKey, account: APIKeyStore.voiceAccount) ? "保存しました。" : "保存できませんでした。"
-                        if voiceKeyMessage == "保存しました。" {
-                            Speaker.shared.say("今日も一日、おつかれさまでした。")
-                            Speaker.shared.prewarm()
+                    if let keyCheckMessage {
+                        if keyCheckOK {
+                            Label(keyCheckMessage, systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(Palette.green)
+                                .accessibilityIdentifier("keyCheckMessage")
+                        } else {
+                            WarningText(text: keyCheckMessage)
+                                .accessibilityIdentifier("keyCheckMessage")
                         }
-                    }
-                    if let voiceKeyMessage {
-                        Text(voiceKeyMessage).foregroundStyle(voiceKeyMessage == "保存しました。" ? Palette.green : Palette.red)
                     }
                     Button("架空の記録を入れる") { loadSamples() }
                         .accessibilityIdentifier("loadSamples")
-                    Button("すべての記録を消す", role: .destructive) { confirmDelete = true }
                     if let message {
                         Text(message).accessibilityIdentifier("settingsMessage")
                     }
@@ -150,22 +179,75 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("setupGroup")
             }
+
+            Section {
+                DisclosureGroup {
+                    Text("記録は、この iPhone の中だけにあります。iPhone の「iCloud バックアップ」がオンなら、機種変更の時に新しい iPhone へ移せます。念のため、ときどき書き出して控えを残してください。")
+                        .fixedSize(horizontal: false, vertical: true)
+                    ShareLink(item: RecordsFile(records: exportRecords),
+                              preview: SharePreview(RecordExport.fileName())) {
+                        Label("記録を書き出す（\(exportRecords.count)日分）", systemImage: "square.and.arrow.up")
+                            .wrapsForLargeText()
+                    }
+                    .disabled(exportRecords.isEmpty)
+                    .accessibilityIdentifier("exportRecords")
+                    DisclosureGroup {
+                        Text("消すと元に戻せません。先に「記録を書き出す」で控えを残してください。")
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("すべての記録を消す", role: .destructive) { confirmDelete = true }
+                            .accessibilityIdentifier("deleteAllRecords")
+                        if let deleteMessage {
+                            Text(deleteMessage).accessibilityIdentifier("deleteMessage")
+                        }
+                    } label: {
+                        Text("記録を消す")
+                    }
+                    .accessibilityIdentifier("deleteGroup")
+                } label: {
+                    Text("記録の保管（ご家族向け）").font(.title3)
+                }
+                .onAppear { exportRecords = RecordStore.allRecords(context) }
+                .accessibilityIdentifier("keepingGroup")
+            }
+        }
         }
         .font(.title3)
-        .elderScreen("設定")
-        .confirmationDialog("すべての記録を消しますか？元に戻せません。", isPresented: $confirmDelete, titleVisibility: .visible) {
+        .contentMargins(.top, formHeight * 0.3, for: .scrollContent)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { formHeight = $0 }
+        .scrollDismissesKeyboard(.interactively)
+        .elderScreen("設定", hidesDockWithKeyboard: true)
+        .confirmationDialog("\(exportRecords.count)日分の記録を、すべて消しますか？元に戻せません。", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("消す", role: .destructive) {
                 do {
                     try RecordStore.deleteAll(in: context)
-                    message = "記録を消しました。"
+                    exportRecords = []
+                    deleteMessage = "記録を消しました。"
                 } catch {
-                    message = "消せませんでした。"
+                    deleteMessage = "消せませんでした。"
                 }
             }
         }
         .onAppear {
             // Open the setup items until a key is saved, so the first-time setup is easy to find.
             if apiKey.isEmpty { showSetup = true }
+        }
+    }
+
+    /// Tries the key once with a tiny request and says plainly whether it works.
+    private func checkKey() async {
+        keyCheckOK = true
+        keyCheckMessage = "キーが使えるか確かめています…"
+        let problem = await ClaudeClient(apiKey: apiKey).checkKey()
+        switch problem {
+        case nil:
+            keyCheckOK = true
+            keyCheckMessage = "キーが使えることを確かめました。"
+        case .http(let status, _)? where status == 401 || status == 403:
+            keyCheckOK = false
+            keyCheckMessage = "このキーは使えないようです。入力し直してください。"
+        case let other?:
+            keyCheckOK = false
+            keyCheckMessage = "いまは確かめられませんでした（保存はしました）。" + (other.errorDescription ?? "")
         }
     }
 
@@ -198,12 +280,36 @@ struct SettingsView: View {
         }
     }
 
+    /// The export as a .txt file, so it can be saved to Files, AirDrop'ed or mailed with a clear name.
+    struct RecordsFile: Transferable {
+        /// The text is made only when the user actually shares, not on every redraw.
+        let records: [DayRecord]
+        static var transferRepresentation: some TransferRepresentation {
+            FileRepresentation(exportedContentType: .plainText) { file in
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent(RecordExport.fileName())
+                try Data(RecordExport.text(file.records).utf8).write(to: url, options: .atomic)
+                return SentTransferredFile(url)
+            }
+        }
+    }
+
+    /// Adds the made-up records only on days that have no record yet, so real records are never replaced.
     private func loadSamples() {
         do {
+            var added = 0
+            var skipped = 0
             for record in SampleData.records(today: Date()) {
+                if RecordStore.day(record.date, in: context) != nil {
+                    skipped += 1
+                    continue
+                }
                 try RecordStore.save(record, in: context)
+                added += 1
             }
-            message = "架空の記録を入れました。"
+            exportRecords = RecordStore.allRecords(context)
+            message = skipped == 0
+                ? "架空の記録を入れました。"
+                : "架空の記録を\(added)日分入れました。本物の記録がある\(skipped)日には入れていません。"
         } catch {
             message = "入れられませんでした。"
         }

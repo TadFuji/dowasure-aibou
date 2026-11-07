@@ -36,6 +36,7 @@ struct QuestionResult: Codable {
     var correct: Bool?
     var hints: [String]?
     var hintLeaked: Bool?       // a hint contains the expected answer (should be false)
+    var seconds: Double?        // time for the answer (live only)
     var error: String?
 }
 
@@ -161,7 +162,11 @@ if CommandLine.arguments.contains("--interview-demo") {
 }
 
 var answerer: Answerer?
-if live { answerer = Answerer(client: ClaudeClient(apiKey: readAPIKey()), retriever: retriever) }
+// --effort low|medium|high: compare how much the model thinks against waiting time.
+let effort: String? = CommandLine.arguments.firstIndex(of: "--effort").flatMap { i in
+    CommandLine.arguments.indices.contains(i + 1) ? CommandLine.arguments[i + 1] : nil
+}
+if live { answerer = Answerer(client: ClaudeClient(apiKey: readAPIKey()), retriever: retriever, effort: effort) }
 
 var results: [QuestionResult] = []
 for q in questions {
@@ -178,9 +183,12 @@ for q in questions {
     }
     if let answerer {
         do {
+            let started = Date()
             let a = try await answerer.answer(q.question, records: visible, today: now)
+            r.seconds = Date().timeIntervalSince(started)
             r.answer = a.answer
-            r.hints = a.hints
+            // Only the model's own hints are scored; the date hint made in code is left out.
+            r.hints = a.hints.filter { !$0.hasSuffix(Answerer.dateHintSuffix) }
             r.hintLeaked = a.hints.contains { HintSession.matches($0, keywords: q.expectedKeywords) }
             switch a.kind {
             case .found(let dates):
@@ -259,6 +267,17 @@ if live {
     print("hint leaked the answer (of correct): \(correctOnes.filter { $0.hintLeaked == true }.count)/\(correctOnes.count) = \(fmt(summary.hintLeakRate ?? 0))")
     for r in correctOnes where r.hintLeaked == true { print("  leak \(r.id): \(r.hints ?? [])") }
     print("errors: \(summary.errorCount ?? 0)")
+    let times = results.compactMap(\.seconds).sorted()
+    if !times.isEmpty {
+        let average = times.reduce(0, +) / Double(times.count)
+        print(String(format: "effort: %@  seconds per answer: average %.1f, slowest %.1f", effort ?? "default", average, times.last!))
+    }
+    let hintCounts = correctOnes.map { ($0.hints ?? []).count }
+    if !hintCounts.isEmpty {
+        print(String(format: "hints per correct answer: average %.1f", Double(hintCounts.reduce(0, +)) / Double(hintCounts.count)))
+    }
+    // Printed for a person to read: a hint can give the answer away in words a keyword check cannot see.
+    for r in correctOnes { print("  hints \(r.id): \(r.hints ?? [])") }
 }
 
 // Write results

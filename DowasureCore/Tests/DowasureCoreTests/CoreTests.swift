@@ -81,6 +81,104 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
     }
 }
 
+/// Fake transport that answers with a list of results in order (an HTTP status or a network error).
+final class SequenceTransport: HTTPTransport, @unchecked Sendable {
+    enum Step { case status(Int), network(URLError.Code) }
+    private var steps: [Step]
+    private(set) var calls = 0
+    let okBody: String
+
+    init(_ steps: [Step], okBody: String) {
+        self.steps = steps
+        self.okBody = okBody
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        calls += 1
+        let step: Step = steps.isEmpty ? .status(200) : steps.removeFirst()
+        switch step {
+        case .network(let code): throw URLError(code)
+        case .status(let status):
+            let http = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            return (Data((status == 200 ? okBody : "{}").utf8), http)
+        }
+    }
+}
+
+@Suite struct RetryTests {
+    let ok = FakeTransport.messages(text: #"{"summary":"散歩した","people":[],"promises":[],"places":[],"numbers":[],"events":[]}"#)
+
+    func extract(_ transport: SequenceTransport) async throws -> Extraction {
+        try await Recorder(client: ClaudeClient(apiKey: "k", transport: transport, retryDelay: 0)).extract(transcript: "x")
+    }
+
+    @Test func overloadedIsRetriedOnce() async throws {
+        let t = SequenceTransport([.status(529), .status(200)], okBody: ok)
+        #expect(try await extract(t).summary == "散歩した")
+        #expect(t.calls == 2)
+    }
+
+    @Test func secondFailureIsReportedNotRetriedAgain() async {
+        let t = SequenceTransport([.status(503), .status(503), .status(200)], okBody: ok)
+        await #expect(throws: ClaudeError.http(status: 503, body: "{}")) { _ = try await extract(t) }
+        #expect(t.calls == 2)
+    }
+
+    @Test func wrongKeyIsNotRetried() async {
+        let t = SequenceTransport([.status(401)], okBody: ok)
+        await #expect(throws: ClaudeError.http(status: 401, body: "{}")) { _ = try await extract(t) }
+        #expect(t.calls == 1)
+    }
+
+    @Test func droppedConnectionIsRetried() async throws {
+        let t = SequenceTransport([.network(.networkConnectionLost), .status(200)], okBody: ok)
+        #expect(try await extract(t).summary == "散歩した")
+        #expect(t.calls == 2)
+    }
+
+    @Test func offlineIsPlainAndNotRetried() async {
+        let t = SequenceTransport([.network(.notConnectedToInternet)], okBody: ok)
+        await #expect(throws: ClaudeError.offline) { _ = try await extract(t) }
+        #expect(t.calls == 1)
+    }
+
+    @Test func timeoutIsPlainAndNotRetried() async {
+        let t = SequenceTransport([.network(.timedOut)], okBody: ok)
+        await #expect(throws: ClaudeError.timedOut) { _ = try await extract(t) }
+        #expect(t.calls == 1)
+    }
+
+    @Test func messagesAreInPlainWords() {
+        let busy = ClaudeError.http(status: 529, body: "").errorDescription ?? ""
+        #expect(busy.contains("混み合って"))
+        #expect(!busy.contains("529"))
+        #expect(!(ClaudeError.http(status: 400, body: "").errorDescription ?? "").contains("400"))
+        #expect(ClaudeError.missingAPIKey.errorDescription == "APIキーが設定されていません。設定画面で入力してください。")
+    }
+
+    @Test func checkKeyReportsWrongKey() async {
+        let client = ClaudeClient(apiKey: "k", transport: FakeTransport(status: 401, body: "{}"))
+        #expect(await client.checkKey() == .http(status: 401, body: "{}"))
+        let good = ClaudeClient(apiKey: "k", transport: FakeTransport(status: 200, body: "{}"))
+        #expect(await good.checkKey() == nil)
+    }
+}
+
+@Suite struct FollowUpTests {
+    @Test func shortReplyJoinsEarlierQuestion() {
+        #expect(Answerer.followUpQuestion(previous: "眼鏡の人の名前", reply: " 先週 ") == "眼鏡の人の名前（先週）")
+    }
+
+    @Test func longReplyIsANewQuestion() {
+        let reply = "孫の誕生日のプレゼントに何を買うと言っていたか"
+        #expect(Answerer.followUpQuestion(previous: "眼鏡の人の名前", reply: reply) == reply)
+    }
+
+    @Test func noEarlierQuestion() {
+        #expect(Answerer.followUpQuestion(previous: nil, reply: "先週") == "先週")
+    }
+}
+
 @Suite struct RetrieverTests {
     let retriever = Retriever(dayCalendar: tokyo)
     let today = date("2026-11-12") // Thursday
@@ -89,6 +187,38 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         #expect(retriever.dateRange(in: "昨日会った人", today: today) == "2026-11-11"..."2026-11-11")
         #expect(retriever.dateRange(in: "おとといの約束", today: today) == "2026-11-10"..."2026-11-10")
         #expect(retriever.dateRange(in: "3日前に行った店", today: today) == "2026-11-08"..."2026-11-10")
+    }
+
+    @Test func followUpReplyCorrectsTheTime() {
+        let joined = Answerer.followUpQuestion(previous: "昨日会った人の名前", reply: "先週")
+        #expect(retriever.dateRange(in: joined, today: today) == "2026-11-02"..."2026-11-08")
+        // A reply without a time word keeps the time of the first question.
+        let kept = Answerer.followUpQuestion(previous: "昨日会った人の名前", reply: "駅前")
+        #expect(retriever.dateRange(in: kept, today: today) == "2026-11-11"..."2026-11-11")
+    }
+
+    @Test func timeWordsForLongUse() {
+        // Used for a year or two: months, months ago, seasons and last year.
+        #expect(retriever.dateRange(in: "5月に会った人", today: today) == "2026-05-01"..."2026-05-31")
+        #expect(retriever.dateRange(in: "12月の集まり", today: today) == "2025-12-01"..."2025-12-31")
+        #expect(retriever.dateRange(in: "去年の5月の旅行", today: today) == "2025-05-01"..."2025-05-31")
+        #expect(retriever.dateRange(in: "3か月前に行った店", today: today) == "2026-07-23"..."2026-09-01")
+        #expect(retriever.dateRange(in: "三ヶ月前に行った店", today: today) == "2026-07-23"..."2026-09-01")
+        #expect(retriever.dateRange(in: "半年前の約束", today: today) == "2026-04-22"..."2026-06-01")
+        #expect(retriever.dateRange(in: "2週間前に会った人", today: today) == "2026-10-25"..."2026-11-02")
+        #expect(retriever.dateRange(in: "夏ごろに買った物", today: today) == "2026-06-01"..."2026-08-31")
+        #expect(retriever.dateRange(in: "冬に行った温泉", today: today) == "2025-12-01"..."2026-02-28")
+        #expect(retriever.dateRange(in: "去年の夏の旅行", today: today) == "2025-06-01"..."2025-08-31")
+        #expect(retriever.dateRange(in: "去年会った人", today: today) == "2025-01-01"..."2025-12-31")
+        #expect(retriever.dateRange(in: "今年の初めに", today: today) == "2026-01-01"..."2026-11-12")
+    }
+
+    @Test func kanjiNumbersBecomeDigitsOnlyBeforeTimeUnits() {
+        #expect(Retriever.arabicNumerals("三か月前") == "3か月前")
+        #expect(Retriever.arabicNumerals("十二月") == "12月")
+        #expect(Retriever.arabicNumerals("二十日前") == "20日前")
+        #expect(Retriever.arabicNumerals("一昨日の話") == "一昨日の話")
+        #expect(Retriever.arabicNumerals("三田さん") == "三田さん")
     }
 
     @Test func weeksAndMonths() {
@@ -230,12 +360,13 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         #expect(speech[0]["voice"] as? String == CloudVoice.defaultVoiceName)
     }
 
-    @Test func missingKeyFailsWithoutNetwork() async {
-        let fake = FakeTransport(body: "")
-        await #expect(throws: ClaudeError.missingAPIKey) {
-            _ = try await CloudVoice(apiKey: "", transport: fake).synthesize("x")
-        }
-        #expect(fake.lastRequest == nil)
+    @Test func withoutKeyGoesToRelayAndSendsNoKey() async throws {
+        let audio = Data("wav".utf8).base64EncodedString()
+        let fake = FakeTransport(body: #"{"steps":[{"type":"model_output","content":[{"type":"audio","data":"\#(audio)"}]}]}"#)
+        _ = try await CloudVoice(apiKey: "", transport: fake).synthesize("こんばんは")
+        let req = try #require(fake.lastRequest)
+        #expect(req.url == CloudVoice.relayEndpoint)
+        #expect(req.value(forHTTPHeaderField: "x-goog-api-key") == nil)
     }
 
     @Test func httpErrorIsReported() async {
@@ -288,6 +419,18 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         #expect(r.revealed)
         #expect(r.text.hasPrefix("そうです！"))
         #expect(r.text.contains("10月8日の記録より"))
+        #expect(r.recalledByThemselves)
+        #expect(s.hintsGiven == 1)
+    }
+
+    @Test func revealedAnswerIsNotCountedAsRecalled() {
+        var s = HintSession(answer: found())
+        _ = s.start()
+        #expect(!s.respond(to: "答えを教えて").recalledByThemselves)
+        var t = HintSession(answer: found())
+        _ = t.start()
+        #expect(!t.reveal().recalledByThemselves)
+        #expect(!t.respond(to: "森田さん").recalledByThemselves)  // already revealed
     }
 
     @Test func wrongGuessGivesNextHintThenOffersAnswer() {
@@ -311,6 +454,40 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         #expect(a.hints == ["駅前でお会いしました。"])
     }
 
+    @Test func wrongGuessSaysWhatWasHeard() {
+        var s = HintSession(answer: found())
+        _ = s.start()
+        let r = s.respond(to: "守田さん")
+        #expect(!r.revealed)
+        #expect(r.text.hasPrefix("「守田さん」と聞こえました。"))
+    }
+
+    @Test func allHintsLeakingLeavesADateHint() {
+        let a = found(hints: ["森田さんという方です。"])
+        #expect(a.hints == ["10月8日" + Answerer.dateHintSuffix])
+        var s = HintSession(answer: a)
+        let r = s.start()
+        #expect(!r.revealed && r.text.contains("10月8日"))
+    }
+
+    @Test func dateHintIsNotUsedWhenTheDateIsTheAnswer() {
+        // "When did I note it?" → the answer is the date, so "10月8日に覚えておいたことです。" would give it away.
+        let raw = ModelAnswer(found: true, answer: "10月8日です。", evidenceDates: ["2026-10-08"], confidence: .high,
+                              followupQuestion: "", hints: ["10月8日のことです。"], answerKeywords: ["10月8日"])
+        let a = Answerer.verify(raw, candidates: [record("2026-10-08", summary: "歯医者の予約をした")], dayCalendar: tokyo)
+        #expect(a.hints.isEmpty)
+        var s = HintSession(answer: a)
+        let r = s.start()
+        #expect(r.revealed && !r.recalledByThemselves)
+        #expect(s.respond(to: "10月8日").recalledByThemselves == false)
+    }
+
+    @Test func oneLetterKeywordMustBeSaidAlone() {
+        #expect(HintSession.isCorrectGuess("森", keywords: ["森"]))
+        #expect(!HintSession.isCorrectGuess("森本さん", keywords: ["森"]))
+        #expect(HintSession.isCorrectGuess("森田さんです", keywords: ["森田"]))
+    }
+
     @Test func notFoundSaysSoImmediately() {
         let raw = ModelAnswer(found: false, answer: "", evidenceDates: [], confidence: .low, followupQuestion: "どこで会いましたか？")
         var s = HintSession(answer: Answerer.verify(raw, candidates: [], dayCalendar: tokyo))
@@ -326,5 +503,47 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
         let t = MemoLog.appending("にんじんを買う", at: d, to: "[9:00] 薬局に寄る", calendar: cal)
         #expect(t == "[9:00] 薬局に寄る\n[16:05] にんじんを買う")
         #expect(MemoLog.confirmation(for: " にんじんを買う ") == "「にんじんを買う」ですね。覚えました。")
+    }
+}
+
+@Suite struct RecordExportTests {
+    @Test func oldestFirstWithSpokenWordsAndSummary() {
+        let records = [
+            DayRecord(date: "2026-11-11", transcript: "[16:05] にんじんを買う", extraction: Extraction(summary: "買い物の予定。")),
+            DayRecord(date: "2026-11-09", transcript: "", extraction: Extraction(summary: "書道教室に行った。")),
+        ]
+        let text = RecordExport.text(records, exportedOn: date("2026-11-12"), dayCalendar: tokyo)
+        #expect(text.hasPrefix("ど忘れ相棒の記録（2026年11月12日に書き出し、2日分）"))
+        let first = text.range(of: "■ 2026年11月9日")!.lowerBound
+        let second = text.range(of: "■ 2026年11月11日")!.lowerBound
+        #expect(first < second)
+        #expect(text.contains("話したこと:\n[16:05] にんじんを買う\nまとめ: 買い物の予定。"))
+        #expect(RecordExport.fileName(exportedOn: date("2026-11-12"), dayCalendar: tokyo) == "ど忘れ相棒の記録_2026-11-12.txt")
+    }
+}
+
+@Suite struct RecallLogTests {
+    let now = ISO8601DateFormatter().date(from: "2026-11-07T06:00:00Z")!
+
+    @Test func countsOnlyTheLastSevenDays() {
+        var log = RecallLog()
+        log.add(at: now.addingTimeInterval(-3600), hintsUsed: 1)
+        log.add(at: now.addingTimeInterval(-5 * 86400), hintsUsed: 2)
+        log.add(at: now.addingTimeInterval(-10 * 86400), hintsUsed: 1)
+        #expect(log.countInLastWeek(now: now, calendar: tokyo.calendar) == 2)
+    }
+
+    @Test func homeMessageHidesZero() {
+        #expect(RecallLog.homeMessage(weekCount: 0) == nil)
+        #expect(RecallLog.homeMessage(weekCount: 3) == "この1週間で、ご自分で3回思い出せました。")
+    }
+
+    @Test func keepsAtMostMaxEntriesAndSurvivesRoundTrip() {
+        var log = RecallLog()
+        for i in 0..<(RecallLog.maxEntries + 5) { log.add(at: now.addingTimeInterval(Double(i)), hintsUsed: 0) }
+        #expect(log.entries.count == RecallLog.maxEntries)
+        #expect(log.entries.allSatisfy { $0.hintsUsed == 1 })
+        #expect(RecallLog.decoded(from: log.encoded()) == log)
+        #expect(RecallLog.decoded(from: Data("broken".utf8)) == RecallLog())
     }
 }

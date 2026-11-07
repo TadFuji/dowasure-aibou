@@ -1,10 +1,14 @@
 import Foundation
 
-/// Natural-sounding speech from the Gemini API text-to-speech model, using a Google AI Studio key.
+/// Natural-sounding speech from the Gemini API text-to-speech model.
+/// Normally it goes through the maker's voice relay (`relay/`), which holds the Google key, so the
+/// user only enters the Claude key (藤川さん, 2026-11-07). A developer key, if given, talks to Google directly.
 /// Only the sentence to be read aloud is sent. The app falls back to the built-in iPhone voice
-/// when no key is set or the request fails.
+/// when the request fails.
 public struct CloudVoice: Sendable {
     public static let endpoint = URL(string: "https://generativelanguage.googleapis.com/v1beta/interactions")!
+    /// The maker's voice relay. Its Google key lives only on the server.
+    public static let relayEndpoint = URL(string: "https://dowasure-voice-relay.vercel.app/api/speak")!
     public static let model = "gemini-3.8-flash-lite-tts"
     /// Used when the main model hits its daily limit (Tier 1: 100 requests per day per model, 2026-11-03).
     public static let fallbackModel = "gemini-3.8-flash-tts"
@@ -23,6 +27,11 @@ public struct CloudVoice: Sendable {
     /// Delivery hint, e.g. speaking slowly for older listeners.
     public var style: String
 
+    /// Uses the relay (no key on the iPhone).
+    public static func relay(voiceName: String = CloudVoice.defaultVoiceName, style: String) -> CloudVoice {
+        CloudVoice(apiKey: "", voiceName: voiceName, style: style)
+    }
+
     public init(apiKey: String, voiceName: String = CloudVoice.defaultVoiceName,
                 style: String = "calm, kind and warm, speaking slowly and clearly",
                 transport: HTTPTransport = URLSessionTransport()) {
@@ -33,12 +42,11 @@ public struct CloudVoice: Sendable {
     }
 
     func makeRequest(text: String, stream: Bool = false) throws -> URLRequest {
-        guard !apiKey.isEmpty else { throw ClaudeError.missingAPIKey }
-        var request = URLRequest(url: Self.endpoint)
+        var request = URLRequest(url: apiKey.isEmpty ? Self.relayEndpoint : Self.endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        if !apiKey.isEmpty { request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key") }
         var annotation: [String: JSONValue] = ["type": "speech_metadata"]
         if !style.isEmpty { annotation["style"] = .string(style) }
         let body: JSONValue = [
@@ -66,7 +74,8 @@ public struct CloudVoice: Sendable {
             let task = Task {
                 do {
                     var request = try makeRequest(text: text, stream: true)
-                    request.timeoutInterval = 30
+                    // If no audio comes for this long, give up so the iPhone voice speaks instead of silence.
+                    request.timeoutInterval = 12
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                         var body = ""

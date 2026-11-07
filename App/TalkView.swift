@@ -12,6 +12,8 @@ struct TalkView: View {
     @State private var savedToday: [String] = []
     @State private var lastConfirmation: String?
     @State private var errorMessage: String?
+    /// A calm note (not a warning) when the words were saved but the summary could not be made yet.
+    @State private var note: String?
     @State private var voice = VoiceInput()
     @State private var started = false
     /// Transcript before the last item, so a mistaken item can be taken back.
@@ -21,47 +23,25 @@ struct TalkView: View {
     private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
 
     var body: some View {
+        // Top half: only things to read. Bottom half: every button, within reach of the right thumb (藤川さん, 2026-11-07).
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text(lastConfirmation ?? Self.prompt)
                     .font(.title.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("aiQuestion")
 
-                if voiceEnabled {
-                    MicButton(voice: voice, idleTitle: lastConfirmation == nil ? "声で話す" : "ほかにも話す") { spoken in
-                        Task { await remember(spoken) }
-                    }
-                }
-                HStack {
-                    TextField("文字で書く（例：4時に歯医者）", text: $typed, axis: .vertical)
-                        .font(.title2)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("answerInput")
-                    Button("覚える") {
-                        let text = typed
-                        typed = ""
-                        Task { await remember(text) }
-                    }
-                    .font(.title2.bold())
-                    .disabled(typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier("sendAnswer")
-                }
-
-                if undoTranscript != nil {
-                    Button {
-                        Task { await undoLast() }
-                    } label: {
-                        Label("いまのを取り消す", systemImage: "arrow.uturn.backward")
-                            .font(.title2.bold())
-                            .frame(maxWidth: .infinity, minHeight: 64)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("undoButton")
-                }
-
+                MicStatus(voice: voice)
                 if let errorMessage {
                     WarningText(text: errorMessage)
+                }
+                if let note {
+                    Label(note, systemImage: "checkmark.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("saveNote")
                 }
 
                 if !savedToday.isEmpty {
@@ -69,6 +49,8 @@ struct TalkView: View {
                         Text("今日覚えたこと").font(.title2.bold())
                         ForEach(Array(savedToday.enumerated()), id: \.offset) { _, line in
                             Text(line).font(.title2)
+                                // VoiceOver reads "16時05分、…" instead of "かっこ 16 コロン 05".
+                                .accessibilityLabel(Self.spokenLine(line))
                         }
                     }
                     .padding()
@@ -79,20 +61,80 @@ struct TalkView: View {
             }
             .padding(24)
         }
-        .elderScreen("覚えておくこと")
+        .elderScreen("覚えておくこと") {
+            // "もう一度きく" and "いまのを取り消す" side by side, so the bottom area stays short.
+            if (lastConfirmation != nil && voiceEnabled) || undoTranscript != nil {
+                HStack(spacing: 12) {
+                    if let lastConfirmation, voiceEnabled {
+                        RepeatButton(text: lastConfirmation)
+                    }
+                    if undoTranscript != nil {
+                        Button {
+                            Task { await undoLast() }
+                        } label: {
+                            Label("いまのを取り消す", systemImage: "arrow.uturn.backward")
+                                .font(.title2.bold())
+                                .wrapsForLargeText()
+                                .frame(maxWidth: .infinity, minHeight: 64)
+                        }
+                        .buttonStyle(.bordered)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .accessibilityIdentifier("undoButton")
+                    }
+                }
+            }
+            if voiceEnabled {
+                MicButton(voice: voice, idleTitle: lastConfirmation == nil ? "声で話す" : "ほかにも話す") { spoken in
+                    Task { await remember(spoken) }
+                }
+            }
+            // The field and a full-width button below it: a small text button beside the field was hard to hit.
+            TextField("文字で書く（例：4時に歯医者）", text: $typed, axis: .vertical)
+                .font(.title2)
+                .lineLimit(1...3)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("answerInput")
+            if !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button {
+                    let text = typed
+                    typed = ""
+                    Task { await remember(text) }
+                } label: {
+                    Label("覚える", systemImage: "checkmark")
+                        .font(.title2.bold())
+                        .wrapsForLargeText()
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.indigo)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .accessibilityIdentifier("sendAnswer")
+            }
+        }
         .task {
             guard !started else { return }
             started = true
             loadToday()
             if voiceEnabled {
                 await Speaker.shared.sayAndWait(Self.prompt)
+                // Left the screen during the prompt, or already listening from the button: do nothing.
+                guard !Task.isCancelled, !voice.isListening else { return }
                 await voice.start { spoken in Task { await remember(spoken) } }
             }
         }
         .onDisappear {
             voice.stop()
-            Speaker.shared.stop()
+            Speaker.shared.stopEverything()
         }
+    }
+
+    /// "[16:05] にんじんを買う" → "16時05分、にんじんを買う" for VoiceOver.
+    static func spokenLine(_ line: String) -> String {
+        guard line.hasPrefix("["), let close = line.firstIndex(of: "]") else { return line }
+        let time = line[line.index(after: line.startIndex)..<close].split(separator: ":")
+        let rest = line[line.index(after: close)...].trimmingCharacters(in: .whitespaces)
+        guard time.count == 2 else { return line }
+        return "\(time[0])時\(time[1])分、\(rest)"
     }
 
     /// Takes back the last saved item (for mis-heard words), then refreshes the summary.
@@ -124,6 +166,7 @@ struct TalkView: View {
         guard !words.isEmpty else { return }
         voice.stop()
         errorMessage = nil
+        note = nil
         let today = DayCalendar().key(for: Date())
         let existing = RecordStore.day(today, in: context)?.record
         let transcript = MemoLog.appending(words, at: Date(), to: existing?.transcript ?? "")
@@ -132,6 +175,7 @@ struct TalkView: View {
                                            extraction: existing?.extraction ?? .empty), in: context)
         } catch {
             errorMessage = "記録できませんでした。もう一度お試しください。"
+            if voiceEnabled { Speaker.shared.say("記録できませんでした。もう一度お試しください。") }
             return
         }
         savedToday = transcript.split(separator: "\n").map(String.init)
@@ -149,8 +193,13 @@ struct TalkView: View {
                 try RecordStore.save(DayRecord(date: today, transcript: transcript, extraction: extraction), in: context)
             }
         } catch {
-            // The words are already saved; the summary is refreshed next time.
-            errorMessage = "記録はしました。まとめの作成は次の機会に行います（\(error.localizedDescription)）"
+            // The words are already saved (that is what matters); the summary is made again next time.
+            // Shown quietly, not as a red warning, so it does not look as if saving failed.
+            if case ClaudeError.missingAPIKey = error {
+                note = "記録しました。はじめの準備がまだなので、話した言葉のまま残しています。"
+            } else {
+                note = "記録しました。まとめは、次に話したときに作り直します。"
+            }
         }
     }
 }

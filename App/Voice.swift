@@ -25,14 +25,36 @@ final class VoiceInput {
     private var task: SFSpeechRecognitionTask?
     private var silenceTimer: Timer?
     private var onFinish: ((String) -> Void)?
+    /// True while permission is being asked, before listening begins (so a second tap does not start twice).
+    private var isStarting = false
+    /// Changes on every start and on stop(); a start that was overtaken (e.g. the screen was left) gives up.
+    private var startToken = 0
+    /// Identifies the current recognition, so late callbacks from an earlier one are ignored.
+    private var recognitionID = 0
+
+    /// Registered on the first start (SwiftUI may create this object more than once before using it).
+    private var observingInterruptions = false
 
     var isListening: Bool { state == .listening }
 
     func start(onFinish: @escaping (String) -> Void) async {
-        guard state != .listening else { return }
+        // Decide before the first await: two quick calls must not both start the microphone.
+        guard state != .listening, !isStarting else { return }
+        isStarting = true
+        if !observingInterruptions {
+            observingInterruptions = true
+            // A phone call or Siri takes the microphone: finish cleanly instead of hanging.
+            Self.observeInterruptions { [weak self] in self?.stop() }
+        }
+        startToken += 1
+        let mine = startToken
+        defer { if mine == startToken { isStarting = false } }
         self.onFinish = onFinish
         text = ""
-        guard await Self.requestPermissions() else {
+        let allowed = await Self.requestPermissions()
+        // stop() was called while waiting (e.g. the user went back to the home screen): do not start.
+        guard mine == startToken else { return }
+        guard allowed else {
             state = .failed("マイクと音声認識を許可してください（設定アプリ → ど忘れ相棒）。")
             return
         }
@@ -63,8 +85,11 @@ final class VoiceInput {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             resetSilenceTimer()
 
+            recognitionID += 1
+            let id = recognitionID
             task = Self.startRecognition(recognizer: recognizer, request: request) { [weak self] transcript, done, errorText in
-                guard let self else { return }
+                // Late news from a recognition that was already stopped must not touch the current one.
+                guard let self, id == self.recognitionID, self.state == .listening else { return }
                 if let transcript {
                     self.text = transcript
                     self.resetSilenceTimer()
@@ -86,7 +111,13 @@ final class VoiceInput {
     }
 
     /// Ends listening and hands the recognized text to the caller once.
+    /// Also cancels a start that is still waiting for permission.
     func stop() {
+        if isStarting {
+            startToken += 1
+            isStarting = false
+            onFinish = nil
+        }
         guard state == .listening else { return }
         cleanUp()
         state = .idle
@@ -97,7 +128,14 @@ final class VoiceInput {
         if !finished.isEmpty { callback?(finished) }
     }
 
+    /// Ends listening without handing over what was heard (e.g. the user pressed a button instead).
+    func cancel() {
+        onFinish = nil
+        stop()
+    }
+
     private func cleanUp() {
+        recognitionID += 1
         silenceTimer?.invalidate()
         silenceTimer = nil
         if engine.isRunning { engine.stop() }
@@ -131,6 +169,15 @@ final class VoiceInput {
 
     // The callbacks below run on background threads. They live in nonisolated functions
     // so Swift does not treat them as main-actor code (which would crash at runtime).
+
+    /// Calls `began` on the main actor when another app (a call, Siri, an alarm) interrupts audio.
+    nonisolated static func observeInterruptions(_ began: @escaping @MainActor @Sendable () -> Void) {
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) { note in
+            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            guard raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .began else { return }
+            Task { @MainActor in began() }
+        }
+    }
 
     nonisolated private static func requestPermissions() async -> Bool {
         let speech = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
@@ -176,6 +223,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     override init() {
         super.init()
         synthesizer.delegate = self
+        // On an interruption, stop and release anyone waiting, so the app never waits for audio that will not finish.
+        VoiceInput.observeInterruptions { Speaker.shared.stopEverything() }
     }
 
     /// "slow" or "normal", chosen in settings (key "speechSpeed").
@@ -224,8 +273,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 
     /// Which voice to use: "cloud" (Gemini, most natural; the default) or "device" (iPhone, no delay).
+    /// No Google key is needed on the iPhone: the voice goes through the maker's relay (2026-11-07).
     var usesCloudVoice: Bool {
-        guard !APIKeyStore.load(account: APIKeyStore.voiceAccount).isEmpty else { return false }
         // The maker compared both and chose Gemini (2026-11-03); the iPhone voice is the fallback.
         return UserDefaults.standard.string(forKey: Self.voiceModeKey) != "device"
     }
@@ -242,21 +291,27 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
 
-        let cloudKey = usesCloudVoice ? APIKeyStore.load(account: APIKeyStore.voiceAccount) : ""
-        Self.trace("say: cloud=\(!cloudKey.isEmpty) mode=\(UserDefaults.standard.string(forKey: Self.voiceModeKey) ?? "nil") keySaved=\(!APIKeyStore.load(account: APIKeyStore.voiceAccount).isEmpty)")
+        let useCloud = usesCloudVoice
+        // A developer's own Google key (DEBUG launch) talks to Google directly; otherwise the relay.
+        let ownKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
+        Self.trace("say: cloud=\(useCloud) mode=\(UserDefaults.standard.string(forKey: Self.voiceModeKey) ?? "nil") ownKey=\(!ownKey.isEmpty)")
         let cloudVoiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
         let style = Self.style(for: speed)
-        if !cloudKey.isEmpty {
-            let voice = CloudVoice(apiKey: cloudKey, voiceName: cloudVoiceName, style: style)
+        if useCloud {
+            let voice = CloudVoice(apiKey: ownKey, voiceName: cloudVoiceName, style: style)
             let cacheFile = Self.cacheURL(text: text, voice: cloudVoiceName, style: style)
-            if let cached = cacheFile.flatMap({ try? Data(contentsOf: $0) }), let player = try? AVAudioPlayer(data: cached) {
+            let bundled = Self.bundledURL(text: text, voice: cloudVoiceName, style: style)
+            if let cached = (bundled ?? cacheFile).flatMap({ try? Data(contentsOf: $0) }), let player = try? AVAudioPlayer(data: cached) {
                 // Fixed phrase already on the iPhone: plays at once.
                 player.delegate = self
                 self.player = player
                 stopWaitingTone()
-                player.play()
-                await withCheckedContinuation { finished = $0; waiterGeneration = generation }
-                return
+                if player.play() {
+                    await withCheckedContinuation { finished = $0; waiterGeneration = generation }
+                    return
+                }
+                // Could not play (e.g. audio is busy): fall through to the other ways, never wait forever.
+                self.player = nil
             }
             if cacheFile == nil {
                 // Main model first; if it has hit its daily limit, the other model (separate limit).
@@ -277,9 +332,11 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 player.delegate = self
                 self.player = player
                 stopWaitingTone()
-                player.play()
-                await withCheckedContinuation { finished = $0; waiterGeneration = generation }
-                return
+                if player.play() {
+                    await withCheckedContinuation { finished = $0; waiterGeneration = generation }
+                    return
+                }
+                self.player = nil
             }
         }
         guard mine == generation else { return }
@@ -298,15 +355,21 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
     // MARK: Daily limit handling
 
-    private static var rateLimitedUntil: [String: Date] = [:]
+    /// Kept on the iPhone (not only in memory), so after reopening the app the first sentence
+    /// does not wait for a model that already hit its daily limit. Tried again after an hour.
+    private static let rateLimitKey = "voiceRateLimitedUntil"
 
     private static func modelsToTry() -> [String] {
-        [CloudVoice.model, CloudVoice.fallbackModel].filter { (rateLimitedUntil[$0] ?? .distantPast) < Date() }
+        let until = UserDefaults.standard.dictionary(forKey: rateLimitKey) as? [String: Double] ?? [:]
+        let now = Date().timeIntervalSince1970
+        return [CloudVoice.model, CloudVoice.fallbackModel].filter { (until[$0] ?? 0) < now }
     }
 
     private static func markRateLimited(_ model: String) {
         trace("voice: daily limit reached for \(model)")
-        rateLimitedUntil[model] = Date().addingTimeInterval(60 * 60)
+        var until = UserDefaults.standard.dictionary(forKey: rateLimitKey) as? [String: Double] ?? [:]
+        until[model] = Date().addingTimeInterval(60 * 60).timeIntervalSince1970
+        UserDefaults.standard.set(until, forKey: rateLimitKey)
     }
 
     private func synthesizeWithFallback(_ voice: CloudVoice, text: String) async -> Data? {
@@ -329,7 +392,9 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
     /// Starts a soft, repeating three-beep tone. It stops by itself when the next voice starts.
     func startWaitingTone() {
-        guard !toneOn else { return }
+        // If the audio engine was stopped behind our back (call, headphones unplugged), start the tone again.
+        if toneOn && engine.isRunning { return }
+        if toneOn { toneNode.stop(); toneOn = false }
         prepareEngine()
         guard let pattern = Self.tonePattern(format: pcmFormat) else { return }
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
@@ -338,6 +403,50 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         Self.loop(pattern, on: toneNode)
         toneNode.play()
         toneOn = true
+    }
+
+    /// "そうです！" moment: a soft rising two-note chime (G4 → C5, below 1 kHz) and a success vibration,
+    /// then the words. The short wait keeps the chime from being covered by the voice.
+    func celebrateThenSay(_ text: String) {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        prepareEngine()
+        if let chime = Self.chimePattern(format: pcmFormat) {
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+            try? AVAudioSession.sharedInstance().setActive(true)
+            if (try? engine.start()) != nil {
+                toneNode.scheduleBuffer(chime, at: nil, options: .interrupts, completionHandler: nil)
+                toneNode.play()
+            }
+        }
+        let mine = generation
+        Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            // Left the screen or something else started speaking meanwhile: stay quiet.
+            guard mine == generation else { return }
+            await sayAndWait(text)
+        }
+    }
+
+    /// Two gentle bell-like notes, pure tones only so nothing reaches 1 kHz.
+    nonisolated static func chimePattern(format: AVAudioFormat) -> AVAudioPCMBuffer? {
+        let rate = format.sampleRate
+        let notes: [(start: Double, frequency: Double)] = [(0, 392.0), (0.22, 523.25)]
+        let noteLength = 0.7
+        let total = Int(rate * (0.22 + noteLength))
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(total)),
+              let out = buffer.floatChannelData?[0] else { return nil }
+        buffer.frameLength = AVAudioFrameCount(total)
+        for i in 0..<total { out[i] = 0 }
+        let attackFrames = Int(rate * 0.015)
+        for note in notes {
+            let start = Int(rate * note.start)
+            for i in 0..<Int(rate * noteLength) where start + i < total {
+                let t = Double(i) / rate
+                let attack = i < attackFrames ? Double(i) / Double(attackFrames) : 1
+                out[start + i] += Float(0.12 * attack * exp(-t * 5) * sin(2 * .pi * note.frequency * t))
+            }
+        }
+        return buffer
     }
 
     func stopWaitingTone() {
@@ -426,6 +535,10 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 scheduled += 1
                 if scheduled == 1 {
                     stopWaitingTone()
+                    // Playing on a stopped engine crashes; restart it, or let the iPhone voice take over.
+                    if !engine.isRunning {
+                        do { try engine.start() } catch { return .failed }
+                    }
                     streamNode.play()
                     Logger(subsystem: "io.github.tadfuji.dowasure", category: "voice")
                         .info("stream first audio after \(Date().timeIntervalSince(streamStart), format: .fixed(precision: 2))s")
@@ -474,7 +587,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 
     /// Sentences the app always says. Their audio is kept on the iPhone so they play without waiting.
-    nonisolated static let fixedPhrases = ["覚えておきたいことを、話してください。", "今日も一日、おつかれさまでした。", "取り消しました。"]
+    nonisolated static let fixedPhrases = ["覚えておきたいことを、話してください。", "今日も一日、おつかれさまでした。", "取り消しました。",
+                                           "何を思い出したいですか？"]
 
     nonisolated private static func style(for speed: String) -> String {
         // Older listeners hear lower, slower, clearly articulated speech best.
@@ -487,25 +601,43 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     nonisolated private static func cacheURL(text: String, voice: String, style: String) -> URL? {
         guard fixedPhrases.contains(text),
               let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
+        return dir.appendingPathComponent("\(fileStem(text: text, voice: voice, style: style)).wav")
+    }
+
+    nonisolated static func fileStem(text: String, voice: String, style: String) -> String {
         let digest = SHA256.hash(data: Data("\(voice)|\(style)|\(text)".utf8)).map { String(format: "%02x", $0) }.joined()
-        return dir.appendingPathComponent("voice-\(digest).wav")
+        return "voice-\(digest)"
+    }
+
+    /// Fixed phrases recorded once with the Gemini voice and shipped inside the app (`App/Resources/Voice`),
+    /// so they play at once even on the first launch and without the network.
+    nonisolated private static func bundledURL(text: String, voice: String, style: String) -> URL? {
+        guard fixedPhrases.contains(text) else { return nil }
+        return Bundle.main.url(forResource: fileStem(text: text, voice: voice, style: style), withExtension: "wav")
     }
 
     /// Prepares the fixed phrases in the background (called at launch and when the voice changes).
     func prewarm() {
+        guard usesCloudVoice else { return }
         let key = APIKeyStore.load(account: APIKeyStore.voiceAccount)
-        guard !key.isEmpty else { return }
         let voiceName = UserDefaults.standard.string(forKey: Self.cloudVoiceKey) ?? CloudVoice.defaultVoiceName
         let style = Self.style(for: speed)
         Task.detached {
             for phrase in Self.fixedPhrases {
-                guard let url = Self.cacheURL(text: phrase, voice: voiceName, style: style),
+                guard Self.bundledURL(text: phrase, voice: voiceName, style: style) == nil,
+                      let url = Self.cacheURL(text: phrase, voice: voiceName, style: style),
                       !FileManager.default.fileExists(atPath: url.path) else { continue }
                 if let audio = try? await CloudVoice(apiKey: key, voiceName: voiceName, style: style).synthesize(phrase) {
                     try? audio.write(to: url)
                 }
             }
         }
+    }
+
+    /// Stops speech and the waiting tone. Used when leaving a screen, so nothing keeps sounding at home.
+    func stopEverything() {
+        stop()
+        stopWaitingTone()
     }
 
     func stop() {
@@ -546,7 +678,28 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 }
 
-/// Large microphone button shared by the talk and ask screens.
+/// "Say it again": repeats the last reply aloud, for a user who missed it or was not looking.
+struct RepeatButton: View {
+    let text: String
+    /// A screen that listens after speaking (the hint screen) passes its own way to say it again.
+    var action: (() -> Void)? = nil
+
+    var body: some View {
+        Button {
+            if let action { action() } else { Speaker.shared.say(text) }
+        } label: {
+            Label("もう一度きく", systemImage: "speaker.wave.2.fill")
+                .font(.title2.bold())
+                .wrapsForLargeText()
+                .frame(maxWidth: .infinity, minHeight: 64)
+        }
+        .buttonStyle(.bordered)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .accessibilityIdentifier("repeatButton")
+    }
+}
+
+/// Large microphone button shared by the talk and ask screens (placed in the bottom area; see MicStatus).
 struct MicButton: View {
     let voice: VoiceInput
     var idleTitle = "声で話す"
@@ -571,11 +724,21 @@ struct MicButton: View {
         .tint(voice.isListening ? Palette.red : Palette.green)
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityIdentifier("micButton")
+    }
+}
 
+/// What the microphone hears, or why it could not listen. Shown in the reading area at the top,
+/// while the microphone button itself sits at the bottom within reach of the thumb.
+struct MicStatus: View {
+    let voice: VoiceInput
+
+    var body: some View {
         if voice.isListening {
-            Text(voice.text.isEmpty ? "どうぞ、お話しください…" : voice.text)
+            Label(voice.text.isEmpty ? "どうぞ、お話しください…" : voice.text, systemImage: "mic.fill")
                 .font(.title2)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("micStatus")
         }
         if case .failed(let message) = voice.state {
             WarningText(text: message)

@@ -9,6 +9,7 @@
 - このリポジトリは公開する。API キー・藤川さんの本物の記録・他人の実名を入れない。デモ用データは `SampleData.swift` の架空データだけ。`.githooks/pre-commit` が `sk-ant-` と `private-data/` をはじく（`git config core.hooksPath .githooks` が前提）。
 - 医療・診断めいた機能や文言を入れない。
 - 利用者は高齢者：高い音が聞こえにくい前提で、音は低め（通信音は1kHz未満）、声は低め・ゆっくり・はっきり。文字とボタンは大きく、音だけに頼らず必ず文字でも示す（2026-11-03 藤川さんの指示「全体的に」）。シニアフリー・ユニバーサルデザイン：白文字の背景色はコントラスト比4.5以上（`Palette` を使う。システムのオレンジ・緑は約2.2で不可）、警告は `WarningText`（印＋言葉）、ボタンの文字は `wrapsForLargeText()` で最大の文字サイズでも途切れさせない、操作の開始・終了は振動でも知らせる、間違いは取り消せるようにする。
+- ボタンは画面の下半分に置く（2026-11-07 藤川さん「親指はiPhoneに対して下半分しか使えません」）。ホーム以外の画面は `elderScreen(タイトル) { ボタン }` の `actions` に入れると、下の帯（`ThumbDock`）に「ホームにもどる」と一緒に並ぶ。上半分は質問・ヒント・答えなど読むものだけ。
 - Managed Agents は使わない（記録を端末外に保存しないため）。
 - 期間中に新規作成したコードだけを使う。
 
@@ -25,6 +26,10 @@
 - `App/EveningReminder.swift`: 毎晩の通知（UNCalendarNotificationTrigger、既定20:00）。通知をタップすると AppRouter 経由で聞き取り画面を開く。
 - `UITests/`: 画面の通しテスト。起動引数 `-uitest-no-voice` で読み上げとマイクを止める。起動引数 `-uitest-reset`（記録とキーを消す）、`-uitest-reset-records`（記録だけ消す）。
 - `project.yml` から xcodegen で `.xcodeproj` を生成する（`.xcodeproj` はコミットしない）。
+- `.claude/`（Claude Code の使い分け、2026-11-07）
+  - `skills/`：`dev-log`（開発記録の書き方）、`pre-publish-check`（公開前の点検）。
+  - `agents/`：`elder-user-reviewer`（高齢の利用者役）、`hint-leak-judge`（ヒントが答えを漏らしていないか）、`ios-reviewer`（落ちる・固まる・音が残る不具合）、`hackathon-judge`（配点どおりの採点）。作った本人と別の目で見るときに呼ぶ。
+  - `settings.json` のフック：書き込み前に鍵と `secrets/`・`private-data/` を止める（`guard_secrets.py`）、公開切り替えと強制 push は確認を出す（`guard_publish.py`）、App と中核に医療めいた言葉が入ったら知らせる（`check_wording.py`）、終える前に中核を変えていれば `swift test`、開発記録の追記漏れを知らせる（`finish_check.py`）。
 
 ## 起動とテスト
 
@@ -34,10 +39,11 @@ cd "/Volumes/ROCKET_XTRM/coding/Built with Claude" && xcodegen generate && xcode
 ```
 
 - 実 API を使う画面テスト（testAskWithKeyAnswersWithDate）は `secrets/anthropic_api_key` があるときだけ動く。キーは起動時の環境変数でアプリ（DEBUG ビルドのみ）に渡り、キーチェーンに保存される。
-- シミュレーターは専用の `Dowasure-iPhone`（iOS 26.5）を使う。
+- シミュレーターは専用の `Dowasure-iPhone`（iOS 26.5）を使う。2026-11-07、`name=Dowasure-iPhone` の指定では Xcode が最新の iOS の機種として探して止まった。`xcrun simctl list devices` で id を調べ、`-destination 'platform=iOS Simulator,id=<id>'` で指定する。
 
 ## 既知の問題
 
+- 2026-11-07、画面テストを続けて流すと、テストの部品の起動が "Busy"（Application failed preflight checks）で失敗することがあった。20秒ほど間をあけてから流し直す。
 - 画面テストの最中に `simctl ui content_size` などで表示設定を変えると、シミュレーターの SpringBoard が XCTAutomationSupport 内で落ちた（2026-11-03）。テスト中は設定を変えない。
 
 - Gemini TTS は Tier 1 で1モデルあたり1日100回まで（2026-11-03 確認）。上限時は gemini-3.8-flash-tts に切り替える。試験で藤川さんの枠を使わない（`--voice-demo` や自己点検 `-voice-selftest` は必要な時だけ）。

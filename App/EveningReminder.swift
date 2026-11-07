@@ -40,12 +40,13 @@ enum EveningReminder {
     }
 }
 
-/// Lets a tapped notification open the talk screen.
+/// Lets a tapped notification or Siri open a screen.
 @MainActor
 @Observable
 final class AppRouter {
     static let shared = AppRouter()
     var openTalk = false
+    var openAsk = false
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {

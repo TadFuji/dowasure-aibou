@@ -27,16 +27,39 @@ public enum ClaudeError: Error, Equatable, LocalizedError {
     case noText
     case invalidResponse
     case decoding(String)
+    /// The iPhone is not connected to the internet.
+    case offline
+    /// No reply in time.
+    case timedOut
 
+    /// Plain words for older users: what happened and what to do, without numbers or jargon.
     public var errorDescription: String? {
         switch self {
         case .missingAPIKey: "APIキーが設定されていません。設定画面で入力してください。"
-        case .http(let status, _) where status == 401: "APIキーが正しくないようです。設定画面で確認してください。"
-        case .http(let status, _) where status == 429: "混み合っています。少し待ってから、もう一度お試しください。"
-        case .http(let status, _): "通信でエラーが起きました（\(status)）。"
-        case .refusal: "AIが答えを控えました。"
-        case .truncated: "答えが長すぎて途中で切れました。"
-        case .noText, .invalidResponse, .decoding: "AIの答えを読み取れませんでした。"
+        case .http(let status, _) where status == 401 || status == 403:
+            "APIキーが正しくないようです。設定画面で確認してください。"
+        case .http(let status, _) where Self.isBusy(status):
+            "いま混み合っています。少し待ってから、もう一度お試しください。"
+        case .http: "うまく通信できませんでした。少し待ってから、もう一度お試しください。"
+        case .offline: "インターネットにつながっていないようです。Wi-Fi などを確かめて、もう一度お試しください。"
+        case .timedOut: "時間がかかりすぎたので、いったん止めました。もう一度お試しください。"
+        case .refusal: "うまくお答えできませんでした。言い方を変えて、もう一度お試しください。"
+        case .truncated, .noText, .invalidResponse, .decoding: "答えをうまく受け取れませんでした。もう一度お試しください。"
+        }
+    }
+
+    /// Temporary server-side trouble (rate limit, overload, server error): worth one more try.
+    static func isBusy(_ status: Int) -> Bool {
+        status == 429 || status == 529 || (500...599).contains(status)
+    }
+
+    /// Turns a network error into a plain one. Cancellation is passed through untouched.
+    static func from(_ error: URLError) -> Error {
+        switch error.code {
+        case .cancelled: return CancellationError()
+        case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff: return ClaudeError.offline
+        case .timedOut: return ClaudeError.timedOut
+        default: return error
         }
     }
 }
@@ -60,10 +83,15 @@ public struct ClaudeClient: Sendable {
 
     let apiKey: String
     let transport: HTTPTransport
+    /// Seconds to wait before the one retry after a temporary failure (0 in tests).
+    let retryDelay: Double
+    /// Seconds to wait for a reply before giving up (long enough for a normal answer, short enough not to feel stuck).
+    public static let timeout: Double = 30
 
-    public init(apiKey: String, transport: HTTPTransport = URLSessionTransport()) {
+    public init(apiKey: String, transport: HTTPTransport = URLSessionTransport(), retryDelay: Double = 1.5) {
         self.apiKey = apiKey
         self.transport = transport
+        self.retryDelay = retryDelay
     }
 
     struct SystemBlock: Encodable {
@@ -117,7 +145,7 @@ public struct ClaudeClient: Sendable {
         guard !apiKey.isEmpty else { throw ClaudeError.missingAPIKey }
         var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 60
+        request.timeoutInterval = Self.timeout
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue(Self.apiVersion, forHTTPHeaderField: "anthropic-version")
@@ -148,7 +176,7 @@ public struct ClaudeClient: Sendable {
                                          maxTokens: Int = 8000) async throws -> (T, Usage?) {
         let request = try makeRequest(model: model, system: system, messages: messages,
                                       schema: schema, effort: effort, maxTokens: maxTokens)
-        let (data, http) = try await transport.send(request)
+        let (data, http) = try await sendWithOneRetry(request)
         guard (200..<300).contains(http.statusCode) else {
             throw ClaudeError.http(status: http.statusCode, body: String(decoding: data, as: UTF8.self))
         }
@@ -171,6 +199,64 @@ public struct ClaudeClient: Sendable {
             return (try JSONDecoder().decode(T.self, from: Data(text.utf8)), response.usage)
         } catch {
             throw ClaudeError.decoding("text: \(error)")
+        }
+    }
+
+    /// Sends the request; after a temporary failure (busy server, dropped connection) tries once more.
+    /// A timeout or no internet is not retried, so the user never waits twice as long.
+    func sendWithOneRetry(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        for attempt in 0..<2 {
+            let last = attempt == 1
+            do {
+                let (data, http) = try await transport.send(request)
+                if !last && ClaudeError.isBusy(http.statusCode) {
+                    try await Task.sleep(for: .seconds(Self.retryWait(http, default: retryDelay)))
+                    continue
+                }
+                return (data, http)
+            } catch let error as URLError {
+                let plain = ClaudeError.from(error)
+                let retryableCodes: [URLError.Code] = [.networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed]
+                let retryable = retryableCodes.contains(error.code)
+                if last || !retryable { throw plain }
+                try await Task.sleep(for: .seconds(retryDelay))
+            }
+        }
+        throw ClaudeError.invalidResponse  // not reached: the second attempt always returns or throws
+    }
+
+    /// Uses the server's "retry-after" when it is short; otherwise the default wait.
+    static func retryWait(_ http: HTTPURLResponse, default fallback: Double) -> Double {
+        if let value = http.value(forHTTPHeaderField: "retry-after"), let seconds = Double(value), seconds >= 0, seconds <= 5 {
+            return seconds
+        }
+        return fallback
+    }
+
+    /// A tiny request to check that a key works (used right after saving it in settings).
+    /// Returns nil when the key works, or the reason it does not.
+    public func checkKey() async -> ClaudeError? {
+        guard !apiKey.isEmpty else { return .missingAPIKey }
+        struct Body: Encodable {
+            let model: String
+            let max_tokens: Int
+            let messages: [Message]
+        }
+        var request = URLRequest(url: Self.endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue(Self.apiVersion, forHTTPHeaderField: "anthropic-version")
+        do {
+            request.httpBody = try JSONEncoder().encode(Body(model: ClaudeModel.haiku.rawValue, max_tokens: 16, messages: [.user("はい")]))
+            let (data, http) = try await transport.send(request)
+            if (200..<300).contains(http.statusCode) { return nil }
+            return .http(status: http.statusCode, body: String(decoding: data, as: UTF8.self))
+        } catch let error as URLError {
+            return (ClaudeError.from(error) as? ClaudeError) ?? .invalidResponse
+        } catch {
+            return .invalidResponse
         }
     }
 }
