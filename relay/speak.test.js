@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validate, POST } from "./api/speak.js";
+import { validate, POST, tooMany } from "./api/speak.js";
 
 const good = () => ({
   model: "gemini-3.8-flash-lite-tts",
@@ -49,4 +49,13 @@ test("forwards to Google with the server key only", async () => {
   assert.equal(res.status, 200);
   assert.equal(seen.init.headers["x-goog-api-key"], "test-key");
   assert.match(seen.url, /generativelanguage\.googleapis\.com/);
+});
+
+test("limits one caller to 20 an hour and everyone to 60 an hour", () => {
+  const t = Date.UTC(2030, 0, 1, 5);
+  for (let i = 0; i < 20; i++) assert.equal(tooMany("a", t), false);
+  assert.equal(tooMany("a", t), true);
+  for (let i = 0; i < 40; i++) assert.equal(tooMany(`b${i}`, t), false);
+  assert.equal(tooMany("c", t), true);
+  assert.equal(tooMany("c", t + 3_600_000), false);
 });

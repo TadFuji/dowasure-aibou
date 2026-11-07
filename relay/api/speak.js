@@ -8,17 +8,26 @@ const MODELS = new Set(["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"]);
 const VOICES = new Set(["Sulafat", "Vindemiatrix", "Achernar"]);
 const MAX_TEXT = 400;   // アプリが読み上げる一文は長くても200文字ほど
 const MAX_STYLE = 300;
-// 1台のサーバーの中だけで数える、ゆるい上限（悪用で藤川さんの枠を使い切られにくくする）。
-const PER_IP_PER_HOUR = 120;
+// 1台のサーバーの中だけで数える上限（悪用で藤川さんの枠を使い切られにくくする）。
+// Gemini の枠は1モデル1日100回（Tier 1）。1人が1時間で使い切れないよう、相手ごと1時間20回、
+// サーバー全体でも1時間60回までにする。決まった言葉はアプリに同梱済みなので、普段はこれで足りる。
+const PER_IP_PER_HOUR = 20;
+const ALL_PER_HOUR = 60;
 const counts = new Map();
 
-function tooMany(ip) {
-  const hour = Math.floor(Date.now() / 3_600_000);
-  const key = `${ip}|${hour}`;
+function bump(key) {
   const n = (counts.get(key) ?? 0) + 1;
   counts.set(key, n);
+  return n;
+}
+
+export function tooMany(ip, now = Date.now()) {
+  const hour = Math.floor(now / 3_600_000);
   if (counts.size > 5000) counts.clear();
-  return n > PER_IP_PER_HOUR;
+  if ((counts.get(`*|${hour}`) ?? 0) >= ALL_PER_HOUR) return true;
+  if (bump(`${ip}|${hour}`) > PER_IP_PER_HOUR) return true;
+  bump(`*|${hour}`);
+  return false;
 }
 
 function reply(status, message) {
