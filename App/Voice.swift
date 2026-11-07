@@ -703,25 +703,35 @@ struct RepeatButton: View {
 struct MicButton: View {
     let voice: VoiceInput
     var idleTitle = "声で話す"
+    /// The screen has just opened and will listen as soon as its opening words are said.
+    /// The button already reads "話し終わった" then, so it does not change under the user's finger
+    /// (2026-11-07, 藤川さん：「声で話す」ボタンがしばらく表示され、そのあとに「話し終わった」ボタンに変わる).
+    var waitingToListen = false
+    /// "話し終わった" pressed before the microphone started: the screen stops the opening words and does not listen.
+    var onCancelWaiting: (() -> Void)? = nil
     let onText: (String) -> Void
+
+    private var showsStop: Bool { voice.isListening || waitingToListen }
 
     var body: some View {
         Button {
             if voice.isListening {
                 voice.stop()
+            } else if waitingToListen {
+                onCancelWaiting?()
             } else {
                 Speaker.shared.stop()
                 Task { await voice.start(onFinish: onText) }
             }
         } label: {
-            Label(voice.isListening ? "話し終わった" : idleTitle,
-                  systemImage: voice.isListening ? "stop.circle.fill" : "mic.fill")
+            Label(showsStop ? "話し終わった" : idleTitle,
+                  systemImage: showsStop ? "stop.circle.fill" : "mic.fill")
                 .font(.title.bold())
                 .wrapsForLargeText()
                 .frame(maxWidth: .infinity, minHeight: 100)
         }
         .buttonStyle(.borderedProminent)
-        .tint(voice.isListening ? Palette.red : Palette.green)
+        .tint(showsStop ? Palette.red : Palette.green)
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityIdentifier("micButton")
     }
