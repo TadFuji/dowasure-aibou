@@ -290,6 +290,15 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         let mine = generation
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
+        // Volume 0: nobody hears it, so do not make the user wait in silence. Return at once; the words
+        // are already on the screen and the microphone starts (with a vibration) right away.
+        // (2026-11-07, 藤川さん：「いえ、音量が０でも使えるUIにしてください。」)
+        VolumeWatcher.shared.refresh()
+        if VolumeWatcher.shared.isTooLow {
+            stopWaitingTone()
+            Self.trace("say: skipped, volume is 0")
+            return
+        }
 
         let useCloud = usesCloudVoice
         // A developer's own Google key (DEBUG launch) talks to Google directly; otherwise the relay.
@@ -748,18 +757,31 @@ struct MicStatus: View {
         if waiting && !voice.isListening {
             // Without this, the user did not know when to start (2026-11-07, 藤川さん：「お話しください」と出て、
             // iPhoneが一瞬ブルっとするのは、3秒後ぐらい).
-            Label("声が終わって、ブルっとしたら、お話しください", systemImage: "hourglass")
+            Label("ブルっとしたら、お話しください", systemImage: "hourglass")
                 .font(.title2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("micWaiting")
         }
         if voice.isListening {
-            Label(voice.text.isEmpty ? "どうぞ、お話しください…" : voice.text, systemImage: "mic.fill")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("micStatus")
+            if voice.text.isEmpty {
+                // The moment to speak, told by sight as well as the vibration: works with the volume at 0.
+                Label("どうぞ、お話しください", systemImage: "mic.fill")
+                    .font(.title.bold())
+                    .foregroundStyle(Palette.green)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Palette.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.green, lineWidth: 3))
+                    .accessibilityIdentifier("micStatus")
+            } else {
+                Label(voice.text, systemImage: "mic.fill")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("micStatus")
+            }
         }
         if case .failed(let message) = voice.state {
             WarningText(text: message)
@@ -784,14 +806,29 @@ final class VolumeWatcher {
         volume = session.outputVolume
         observation = session.observe(\.outputVolume, options: [.new]) { _, change in
             guard let value = change.newValue else { return }
-            Task { @MainActor in VolumeWatcher.shared.volume = value }
+            Task { @MainActor in VolumeWatcher.shared.update(value) }
         }
     }
 
     var isTooLow: Bool { volume < Self.lowLimit }
+
+    /// Reads the volume again (the audio session has just been made active, so the value is fresh).
+    func refresh() {
+        update(AVAudioSession.sharedInstance().outputVolume)
+    }
+
+    private func update(_ value: Float) {
+        let wasLow = isTooLow
+        volume = value
+        // Turned down to 0 while the app is talking: stop the voice now, so the microphone opens
+        // instead of the user waiting for a sentence nobody hears.
+        if !wasLow && isTooLow { Speaker.shared.stop() }
+    }
 }
 
-/// Shown at the top of every screen while the volume is (almost) 0. Words and a mark, not color alone.
+/// Shown at the top of every screen while the volume is (almost) 0. It does not ask the user to turn
+/// the sound up: the app works without sound (藤川さん：「いえ、音量が０でも使えるUIにしてください。」).
+/// It only says how the app tells things instead. Words and a mark, not color alone.
 struct VolumeWarning: View {
     private let watcher = VolumeWatcher.shared
     /// UI tests run with sound off; the warning would only get in the way there.
@@ -799,13 +836,13 @@ struct VolumeWarning: View {
 
     var body: some View {
         if enabled && watcher.isTooLow {
-            Label("音が出ません。iPhone の横のボタンで、音を大きくしてください。", systemImage: "speaker.slash.fill")
-                .font(.title2.bold())
-                .foregroundStyle(Palette.red)
+            Label("音が出ていないので、文字とブルっという振動でお知らせします。", systemImage: "speaker.slash.fill")
+                .font(.title3)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
-                .background(Palette.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
+                .background(.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
                 .accessibilityIdentifier("volumeWarning")
         }
     }
