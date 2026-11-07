@@ -72,11 +72,24 @@
 
 いちばん大事な「答えでなくヒント」も、藤川の言葉「いきなり答えをポンと言うのではなく、まずはヒントを」（11/03）から生まれました。ヒントの決まりは本物の Claude で4回採点し、出たヒントを全部読んで3回直しています（[採点.md](docs/採点.md)）。決まりの全体とコードの場所は [docs/ユニバーサルデザイン.md](docs/ユニバーサルデザイン.md)。
 
+## こういう人たちに点検させました
+
+作った Claude 本人とは別の目で見るため、4人の係（Claude Code のサブエージェント、[`.claude/agents/`](.claude/agents/)）を作り、2026-11-07 の夜に藤川の Mac の Claude Code から名前で呼んで、アプリ全体を点検させました。係はコードを書き換えず、指摘だけを返します。
+
+| 係 | どんな人か | 見つけた主なこと | 直したこと |
+|---|---|---|---|
+| **高齢の利用者役** [`elder-user-reviewer`](.claude/agents/elder-user-reviewer.md) | 70代。iPhone は電話と LINE くらい。老眼で、カタカナ語が分からない | 濃い色の「答えを教えて」が一番目立ち、うっかり押しそう。「APIキー」という言葉が分からない | 「もう少しヒント」を濃い色に。利用者に見せる文から「APIキー」をなくした |
+| **ヒントの審査員** [`hint-leak-judge`](.claude/agents/hint-leak-judge.md) | 答えを漏らしたヒントを、一番の失敗と考える人 | 「◯月の明日」というヒントで、答えの日にちが分かる。**自動の判定（0問）では見つからない漏れ** | ヒントの決まりに3つ足した（今日から数える言い方で日付を言わない、など） |
+| **iOS の技術者** [`ios-reviewer`](.claude/agents/ios-reviewer.md) | 音声・マイク・保存に詳しい技術者 | 読み上げを途中で止めると待ち音が鳴り続ける。電話中にマイクを始めると落ちることがある。設定に「外に送るもの」が書かれていない | 待ち音とマイクの後始末、落ちないための確認、設定に「外に送るもの」を書いた |
+| **大会の審査員** [`hackathon-judge`](.claude/agents/hackathon-judge.md) | 公式の配点どおりに、ほかの作品と並べて厳しく見る人 | 一番の弱点はデモ（動画と画面写真が無い） | 11/08 の撮影で入れる |
+
+16件を直し、直した後に同じ係へもう一度見直させました。全部の指摘、直さなかったものとその理由、フックの試しは [docs/係の点検.md](docs/係の点検.md) にあります。
+
 ## 審査員の方へ
 
 - **5分で全体をつかむ**：[docs/審査員の方へ.md](docs/審査員の方へ.md)
 - **試行錯誤の跡**：[高齢者に使いやすくするために直したこと](#高齢者に使いやすくするために直したこと)、全記録は [docs/開発記録.md](docs/開発記録.md)（藤川の言葉を原文で、問題 → 原因 → 対応 → 結果、うまくいかなかった案も）
-- **Claude Code の使い分け**：[Claude Code との作り方](#claude-code-との作り方)、実物は [`.claude/`](.claude/)
+- **Claude Code の使い分け**：[Claude Code との作り方](#claude-code-との作り方)、実物は [`.claude/`](.claude/)。4人の係に実際に点検させた記録は [docs/係の点検.md](docs/係の点検.md)
 - **ヒントの作りの中心**：[`Prompts.swift`](DowasureCore/Sources/DowasureCore/Prompts.swift)（指示文）、[`Services.swift`](DowasureCore/Sources/DowasureCore/Services.swift) の `Answerer.verify`（点検）
 
 ---
@@ -271,6 +284,7 @@ flowchart LR
 使ってみて分かったこと（[docs/開発記録.md](docs/開発記録.md) より）：
 
 - 2026-11-07 午前、3つの立場のサブエージェントを同時に動かしてレビューし、撮影中に失敗しそうな不具合を4つ見つけました。よく効いたので、同じ立場を係として `.claude/agents/` に固定しました。
+- 同じ日の夜、固定した4人の係を名前で呼んで点検させ、16件を直しました（[こういう人たちに点検させました](#こういう人たちに点検させました)、[docs/係の点検.md](docs/係の点検.md)）。ヒントの係は、自動の判定では0問だった漏れを1問見つけました。
 - 終える前のフックは、作った直後に自分の不具合（日本語のファイル名を見つけられない）を見つけました。
 - アプリの中の AI も同じ考えです。答えが合っているかや日付はコードで確かめ、AI の言葉をそのまま信じません。
 
@@ -346,6 +360,7 @@ open DowasureAibou.xcodeproj
 | [docs/ユニバーサルデザイン.md](docs/ユニバーサルデザイン.md) | 高齢の方に向けた決まりと、その理由 |
 | [docs/採点.md](docs/採点.md) | 採点データの作り方と結果、その限界 |
 | [docs/Claude活用.md](docs/Claude活用.md) | Claude Code の機能をどう使い分けたか |
+| [docs/係の点検.md](docs/係の点検.md) | 4人の係（サブエージェント）に点検させた記録。指摘、直したこと、直さなかった理由 |
 | [SECURITY.md](SECURITY.md) | 問題を見つけた時の連絡先 |
 
 [MIT ライセンス](LICENSE)です。
@@ -364,4 +379,4 @@ open DowasureAibou.xcodeproj
 
 **Senior-friendly throughout.** Buttons only in the lower half (thumb reach), low-pitched sounds under 1 kHz, slow and low voice, text that never truncates at the largest size, contrast of 4.5:1 or more, warnings with icon and words, haptics, undo, and it works with the volume at zero. Not a medical app: no diagnosis or treatment claims.
 
-**How Claude Code was used.** `CLAUDE.md` holds the goal and rules; two skills (dev log, pre-publish check); four read-only subagents that review from a different seat than the builder (elderly user, hint-leak judge, iOS reviewer, hackathon judge); four hooks (block secrets before writing, confirm before making the repo public or force-pushing, flag medical wording, run tests and check the dev log before stopping); an iOS Simulator MCP; parallel threads merged by one coordinator. The full, honest log, including what failed, is in `docs/開発記録.md` (Japanese).
+**How Claude Code was used.** `CLAUDE.md` holds the goal and rules; two skills (dev log, pre-publish check); four read-only subagents that review from a different seat than the builder (elderly user, hint-leak judge, iOS reviewer, hackathon judge); four hooks (block secrets before writing, confirm before making the repo public or force-pushing, flag medical wording, run tests and check the dev log before stopping); an iOS Simulator MCP; parallel threads merged by one coordinator. On 2026-11-07 the four subagents were called by name to review the whole app; they found 16 issues that were then fixed (one hint leak that the automatic check missed, a waiting tone that kept looping, a possible crash during a phone call), and two of them re-checked the fixes (`docs/係の点検.md`). The full, honest log, including what failed, is in `docs/開発記録.md` (Japanese).
