@@ -155,6 +155,8 @@ struct AskView: View {
             Speaker.shared.stopWaitingTone()
             guard !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
+            // Said aloud as well: the user may not be looking at the screen while waiting.
+            Speaker.shared.say(error.localizedDescription)
         }
     }
 }
