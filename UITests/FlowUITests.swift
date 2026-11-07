@@ -110,7 +110,9 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(reply.label.hasPrefix("ヒントです"), reply.label)
         XCTAssertFalse(reply.label.contains("青山"), reply.label)
         app.buttons["revealButton"].tap()
-        XCTAssertTrue(reply.label.contains("の記録より："), reply.label)
+        // The text changes a moment after the tap; wait for it instead of reading the old hint.
+        let revealed = expectation(for: NSPredicate(format: "label CONTAINS %@", "の記録より："), evaluatedWith: reply)
+        wait(for: [revealed], timeout: 5)
         XCTAssertTrue(reply.label.contains("青山"), reply.label)
     }
 
