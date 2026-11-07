@@ -209,7 +209,7 @@ open DowasureAibou.xcodeproj
 
 アプリを起動したら、設定画面で **Claude API の鍵を1つだけ** 入れます（[Anthropic Console](https://console.anthropic.com/) で作成）。
 
-自然な声のための Google の鍵は、利用者には入れてもらいません。作者が置いた「声の中継所」（`relay/`、Vercel で動く小さなサーバー）が鍵を持ち、読み上げる文を Gemini に取り次ぎます。中継所は文を保存せず、決まったモデル・声・長さ（400文字まで）の頼みだけを通します。中継所が使えない時は、自動で iPhone の声で話します。よく使う決まった言葉は、Gemini の声で録ってアプリに同梱しています（`App/Resources/Voice`）。
+自然な声のための Google の鍵は、利用者には入れてもらいません。作者が置いた「声の中継所」（`relay/`、Vercel で動く小さなサーバー）が鍵を持ち、読み上げる文を Gemini に取り次ぎます。中継所は文を保存せず、決まったモデル・声・長さ（400文字まで）の頼みだけを通します。中継所が使えない時は、自動で iPhone の声で話します。中継所は鍵なしで呼べるので、使いすぎを防ぐ上限を置いています（相手ごとに1時間20回、全体で1時間60回）。さらに Google 側の1日の枠（1モデル1日100回）を超えると断られるため、費用は増え続けません。枠を使い切った日は、同梱の録音と iPhone の声で話し続けます。よく使う決まった言葉は、Gemini の声で録ってアプリに同梱しています（`App/Resources/Voice`）。
 
 中継所を自分で立てる場合は、`relay/` を Vercel に置き、環境変数 `GEMINI_API_KEY` に有料の Gemini API の鍵（[Google AI Studio](https://aistudio.google.com/)）を入れ、`CloudVoice.relayEndpoint` をその URL に変えます。
 
