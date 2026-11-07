@@ -360,12 +360,13 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(speech[0]["voice"] as? String == CloudVoice.defaultVoiceName)
     }
 
-    @Test func missingKeyFailsWithoutNetwork() async {
-        let fake = FakeTransport(body: "")
-        await #expect(throws: ClaudeError.missingAPIKey) {
-            _ = try await CloudVoice(apiKey: "", transport: fake).synthesize("x")
-        }
-        #expect(fake.lastRequest == nil)
+    @Test func withoutKeyGoesToRelayAndSendsNoKey() async throws {
+        let audio = Data("wav".utf8).base64EncodedString()
+        let fake = FakeTransport(body: #"{"steps":[{"type":"model_output","content":[{"type":"audio","data":"\#(audio)"}]}]}"#)
+        _ = try await CloudVoice(apiKey: "", transport: fake).synthesize("こんばんは")
+        let req = try #require(fake.lastRequest)
+        #expect(req.url == CloudVoice.relayEndpoint)
+        #expect(req.value(forHTTPHeaderField: "x-goog-api-key") == nil)
     }
 
     @Test func httpErrorIsReported() async {

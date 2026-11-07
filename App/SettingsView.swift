@@ -19,11 +19,8 @@ struct SettingsView: View {
     @State private var exportRecords: [DayRecord] = []
     @State private var deleteMessage: String?
     @State private var showSetup = false
-    @State private var voiceKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
-    @State private var voiceKeyMessage: String?
     @AppStorage(Speaker.cloudVoiceKey) private var cloudVoiceName = CloudVoice.defaultVoiceName
     @AppStorage(Speaker.voiceModeKey) private var voiceMode = "cloud"
-    private var hasCloudVoiceKey: Bool { !voiceKey.isEmpty && voiceKeyMessage != "保存できませんでした。" }
     @AppStorage("speechSpeed") private var speechSpeed = "slow"
     @AppStorage(Speaker.voiceKey) private var voiceIdentifier = ""
     @AppStorage(EveningReminder.enabledKey) private var reminderEnabled = false
@@ -63,15 +60,14 @@ struct SettingsView: View {
             }
 
             Section {
-                if hasCloudVoiceKey {
-                    Picker("声の種類", selection: $voiceMode) {
-                        Text("自然な声").tag("cloud")
-                        Text("すぐ話す声").tag("device")
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: voiceMode) { _, _ in Speaker.shared.say("今日も一日、おつかれさまでした。") }
+                // The natural voice needs no key of its own: it goes through the maker's relay (2026-11-07).
+                Picker("声の種類", selection: $voiceMode) {
+                    Text("自然な声").tag("cloud")
+                    Text("すぐ話す声").tag("device")
                 }
-                if hasCloudVoiceKey && Speaker.shared.usesCloudVoice {
+                .pickerStyle(.segmented)
+                .onChange(of: voiceMode) { _, _ in Speaker.shared.say("今日も一日、おつかれさまでした。") }
+                if voiceMode != "device" {
                     ForEach(CloudVoice.voices, id: \.name) { item in
                         Button {
                             cloudVoiceName = item.name
@@ -147,18 +143,6 @@ struct SettingsView: View {
                             WarningText(text: keyCheckMessage)
                                 .accessibilityIdentifier("keyCheckMessage")
                         }
-                    }
-                    SecureField("自然な声のキー（Google AI Studio）", text: $voiceKey)
-                        .textContentType(.password)
-                    Button("自然な声のキーを保存する") {
-                        voiceKeyMessage = APIKeyStore.save(voiceKey, account: APIKeyStore.voiceAccount) ? "保存しました。" : "保存できませんでした。"
-                        if voiceKeyMessage == "保存しました。" {
-                            Speaker.shared.say("今日も一日、おつかれさまでした。")
-                            Speaker.shared.prewarm()
-                        }
-                    }
-                    if let voiceKeyMessage {
-                        Text(voiceKeyMessage).foregroundStyle(voiceKeyMessage == "保存しました。" ? Palette.green : Palette.red)
                     }
                     Button("架空の記録を入れる") { loadSamples() }
                         .accessibilityIdentifier("loadSamples")

@@ -129,7 +129,8 @@ flowchart LR
         UI --- Core
     end
     Svc -- "その日の言葉 / 候補日の記録と質問" --> Claude["Anthropic<br/>Claude API<br/>Haiku 5.5"]
-    Voice -- "読み上げる文" --> Gemini["Google<br/>Gemini TTS"]
+    Voice -- "読み上げる文" --> Relay["声の中継所<br/>relay/（Google の鍵はここだけ）"]
+    Relay -- "読み上げる文" --> Gemini["Google<br/>Gemini TTS"]
     Voice -. "聞き取り（できるだけ端末内）" .-> Speech["Apple<br/>音声認識"]
 ```
 
@@ -205,10 +206,11 @@ xcodegen generate
 open DowasureAibou.xcodeproj
 ```
 
-アプリを起動したら、設定画面で鍵を入れます。
+アプリを起動したら、設定画面で **Claude API の鍵を1つだけ** 入れます（[Anthropic Console](https://console.anthropic.com/) で作成）。
 
-- **Claude API の鍵**（必須）：[Anthropic Console](https://console.anthropic.com/) で作成します。
-- **Gemini API の鍵**（自然な声。無くても iPhone の声で動きます）：[Google AI Studio](https://aistudio.google.com/) で作成します。有料のキーをおすすめします。無料のキーでは、送った文が Google のサービス改善に使われることがあるためです。
+自然な声のための Google の鍵は、利用者には入れてもらいません。作者が置いた「声の中継所」（`relay/`、Vercel で動く小さなサーバー）が鍵を持ち、読み上げる文を Gemini に取り次ぎます。中継所は文を保存せず、決まったモデル・声・長さ（400文字まで）の頼みだけを通します。中継所が使えない時は、自動で iPhone の声で話します。よく使う決まった言葉は、Gemini の声で録ってアプリに同梱しています（`App/Resources/Voice`）。
+
+中継所を自分で立てる場合は、`relay/` を Vercel に置き、環境変数 `GEMINI_API_KEY` に有料の Gemini API の鍵（[Google AI Studio](https://aistudio.google.com/)）を入れ、`CloudVoice.relayEndpoint` をその URL に変えます。
 
 鍵はキーチェーンに保存され、ファイルには残りません。
 

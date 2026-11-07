@@ -57,7 +57,7 @@ enum APIKeyStore {
     private static let service = "io.github.tadfuji.dowasure.anthropic"
     private static let account = "api-key"
 
-    /// Account name for the Google Cloud Text-to-Speech key (natural voice).
+    /// Account name for a developer's own Gemini key (DEBUG only; users never enter one — the relay holds it).
     static let voiceAccount = "google-tts-key"
 
     static func load(account: String = account) -> String {
