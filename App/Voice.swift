@@ -695,7 +695,17 @@ struct RepeatButton: View {
 
     var body: some View {
         Button {
-            if let action { action() } else { Speaker.shared.say(text) }
+            let sayAgain: @MainActor () -> Void = { if let action { action() } else { Speaker.shared.say(text) } }
+            VolumeWatcher.shared.refresh()
+            if VolumeWatcher.shared.isTooLow {
+                // Volume 0: pressing must not seem to do nothing (2026-11-07, 藤川さん：「もう一度聞く」としても、
+                // 当然ながら何もならないですよね). Tell how to hear it, by a vibration and big words at the top,
+                // and say it by itself as soon as the volume is turned up.
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                VolumeWatcher.shared.waitForVolume(then: sayAgain)
+            } else {
+                sayAgain()
+            }
         } label: {
             Label("もう一度きく", systemImage: "speaker.wave.2.fill")
                 .font(.title2.bold())
@@ -705,6 +715,8 @@ struct RepeatButton: View {
         .buttonStyle(.bordered)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .accessibilityIdentifier("repeatButton")
+        // Leaving the screen: do not suddenly speak elsewhere when the volume goes up later.
+        .onDisappear { VolumeWatcher.shared.cancelWaiting() }
     }
 }
 
@@ -799,6 +811,9 @@ final class VolumeWatcher {
     static let lowLimit: Float = 0.06
 
     private(set) var volume: Float
+    /// "もう一度きく" was pressed with the volume at 0: said as soon as the volume is turned up.
+    private(set) var isWaitingForVolume = false
+    @ObservationIgnored private var pendingSay: (@MainActor () -> Void)?
     @ObservationIgnored private var observation: NSKeyValueObservation?
 
     private init() {
@@ -817,12 +832,27 @@ final class VolumeWatcher {
         update(AVAudioSession.sharedInstance().outputVolume)
     }
 
+    func waitForVolume(then say: @escaping @MainActor () -> Void) {
+        pendingSay = say
+        isWaitingForVolume = true
+    }
+
+    func cancelWaiting() {
+        pendingSay = nil
+        isWaitingForVolume = false
+    }
+
     private func update(_ value: Float) {
         let wasLow = isTooLow
         volume = value
         // Turned down to 0 while the app is talking: stop the voice now, so the microphone opens
         // instead of the user waiting for a sentence nobody hears.
         if !wasLow && isTooLow { Speaker.shared.stop() }
+        // Turned up after "もう一度きく" was pressed at volume 0: say it now.
+        if wasLow && !isTooLow, let say = pendingSay {
+            cancelWaiting()
+            say()
+        }
     }
 }
 
@@ -835,7 +865,18 @@ struct VolumeWarning: View {
     private let enabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
 
     var body: some View {
-        if enabled && watcher.isTooLow {
+        if enabled && watcher.isTooLow && watcher.isWaitingForVolume {
+            // After "もう一度きく" at volume 0: the way to hear it, large and bold.
+            Label("iPhone の左横のボタンで音を大きくすると、すぐに声で読み上げます。", systemImage: "speaker.wave.2.fill")
+                .font(.title2.bold())
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(.indigo.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(.indigo, lineWidth: 3))
+                .accessibilityIdentifier("volumeUpToHear")
+        } else if enabled && watcher.isTooLow {
             Label("音が出ていないので、文字とブルっという振動でお知らせします。", systemImage: "speaker.slash.fill")
                 .font(.title3)
                 .foregroundStyle(.secondary)
