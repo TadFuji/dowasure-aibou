@@ -134,6 +134,7 @@ struct SettingsView: View {
                 DisclosureGroup(isExpanded: $showSetup) {
                     SecureField("APIキー（sk-ant-…）", text: $apiKey)
                         .textContentType(.password)
+                        .submitLabel(.done)
                         .accessibilityIdentifier("apiKeyField")
                     Button("APIキーを保存する") {
                         apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -200,7 +201,8 @@ struct SettingsView: View {
         .font(.title3)
         .contentMargins(.top, formHeight * 0.3, for: .scrollContent)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { formHeight = $0 }
-        .elderScreen("設定")
+        .scrollDismissesKeyboard(.interactively)
+        .elderScreen("設定", hidesDockWithKeyboard: true)
         .confirmationDialog("\(exportRecords.count)日分の記録を、すべて消しますか？元に戻せません。", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("消す", role: .destructive) {
                 do {

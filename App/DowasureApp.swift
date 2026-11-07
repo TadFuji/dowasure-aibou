@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import UIKit
 import SwiftData
 import DowasureCore
 
@@ -159,7 +160,12 @@ struct ThumbDock<Content: View>: View {
 struct ElderScreen<Actions: View>: ViewModifier {
     let title: String
     let actions: Actions
+    /// For screens whose text fields are in the reading area (settings): while the keyboard is up,
+    /// the bottom area is hidden, so it does not ride up over the keyboard and cover the field and its button.
+    /// (On the talk and ask screens the text field is in the bottom area, so it must stay.)
+    var hidesDockWithKeyboard = false
     @Environment(\.dismiss) private var dismiss
+    @State private var keyboardShown = false
 
     func body(content: Content) -> some View {
         VStack(spacing: 0) {
@@ -171,6 +177,7 @@ struct ElderScreen<Actions: View>: ViewModifier {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .frame(minHeight: Style.readingMinHeight)
+            if !(hidesDockWithKeyboard && keyboardShown) {
             ThumbDock {
                 actions
                 Button {
@@ -187,13 +194,22 @@ struct ElderScreen<Actions: View>: ViewModifier {
                 .clipShape(RoundedRectangle(cornerRadius: 24))
                 .accessibilityIdentifier("homeButton")
             }
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardShown = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardShown = false
+        }
     }
 }
 
 extension View {
-    func elderScreen(_ title: String) -> some View { modifier(ElderScreen(title: title, actions: EmptyView())) }
+    func elderScreen(_ title: String, hidesDockWithKeyboard: Bool = false) -> some View {
+        modifier(ElderScreen(title: title, actions: EmptyView(), hidesDockWithKeyboard: hidesDockWithKeyboard))
+    }
 
     /// `actions` are the screen's buttons; they are placed in the bottom half, above "ホームにもどる".
     func elderScreen<Actions: View>(_ title: String, @ViewBuilder actions: () -> Actions) -> some View {

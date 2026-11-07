@@ -125,10 +125,12 @@ final class FlowUITests: XCTestCase {
 
 
     /// Scrolls the current screen until the element exists (Form rows load lazily).
+    /// Swipes the list itself: the middle of the whole app can be the bottom button area (2026-11-07).
     private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
+        let list = app.collectionViews.firstMatch
         var tries = 0
         while !(element.exists && element.isHittable) && tries < 8 {
-            app.swipeUp()
+            if list.exists { list.swipeUp() } else { app.swipeUp() }
             tries += 1
         }
     }
