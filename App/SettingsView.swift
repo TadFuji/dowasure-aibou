@@ -233,12 +233,22 @@ struct SettingsView: View {
         }
     }
 
+    /// Adds the made-up records only on days that have no record yet, so real records are never replaced.
     private func loadSamples() {
         do {
+            var added = 0
+            var skipped = 0
             for record in SampleData.records(today: Date()) {
+                if RecordStore.day(record.date, in: context) != nil {
+                    skipped += 1
+                    continue
+                }
                 try RecordStore.save(record, in: context)
+                added += 1
             }
-            message = "架空の記録を入れました。"
+            message = skipped == 0
+                ? "架空の記録を入れました。"
+                : "架空の記録を\(added)日分入れました。本物の記録がある\(skipped)日には入れていません。"
         } catch {
             message = "入れられませんでした。"
         }
