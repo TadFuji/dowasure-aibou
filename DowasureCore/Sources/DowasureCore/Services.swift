@@ -58,6 +58,9 @@ public struct Answerer: Sendable {
         return "\(previous)（\(reply)）"
     }
 
+    /// Ending of the fallback hint made in code from the date (not by the model).
+    public static let dateHintSuffix = "に覚えておいたことです。"
+
     /// Replies up to this many characters are treated as an answer to the follow-up question.
     public static let maxFollowUpLength = 15
 
@@ -75,8 +78,10 @@ public struct Answerer: Sendable {
             if !followup.isEmpty { text += "\n\(followup)" }
             let keywords = raw.answerKeywords.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             // A hint that gives away the answer is dropped; the user should get the chance to recall.
-            let hints = raw.hints.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            var hints = raw.hints.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty && !HintSession.matches($0, keywords: keywords) }
+            // If every hint was dropped, give the date as a first cue rather than the answer at once.
+            if hints.isEmpty { hints = [labels + dateHintSuffix] }
             return VerifiedAnswer(kind: .found(evidenceDates: evidence), answer: answer,
                                   confidence: raw.confidence, followupQuestion: followup, displayText: text,
                                   hints: hints, answerKeywords: keywords)

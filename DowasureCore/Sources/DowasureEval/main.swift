@@ -180,7 +180,8 @@ for q in questions {
         do {
             let a = try await answerer.answer(q.question, records: visible, today: now)
             r.answer = a.answer
-            r.hints = a.hints
+            // Only the model's own hints are scored; the date hint made in code is left out.
+            r.hints = a.hints.filter { !$0.hasSuffix(Answerer.dateHintSuffix) }
             r.hintLeaked = a.hints.contains { HintSession.matches($0, keywords: q.expectedKeywords) }
             switch a.kind {
             case .found(let dates):
