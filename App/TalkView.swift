@@ -12,6 +12,8 @@ struct TalkView: View {
     @State private var savedToday: [String] = []
     @State private var lastConfirmation: String?
     @State private var errorMessage: String?
+    /// A calm note (not a warning) when the words were saved but the summary could not be made yet.
+    @State private var note: String?
     @State private var voice = VoiceInput()
     @State private var started = false
     /// Transcript before the last item, so a mistaken item can be taken back.
@@ -62,6 +64,12 @@ struct TalkView: View {
 
                 if let errorMessage {
                     WarningText(text: errorMessage)
+                }
+                if let note {
+                    Label(note, systemImage: "checkmark.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("saveNote")
                 }
 
                 if !savedToday.isEmpty {
@@ -126,6 +134,7 @@ struct TalkView: View {
         guard !words.isEmpty else { return }
         voice.stop()
         errorMessage = nil
+        note = nil
         let today = DayCalendar().key(for: Date())
         let existing = RecordStore.day(today, in: context)?.record
         let transcript = MemoLog.appending(words, at: Date(), to: existing?.transcript ?? "")
@@ -134,6 +143,7 @@ struct TalkView: View {
                                            extraction: existing?.extraction ?? .empty), in: context)
         } catch {
             errorMessage = "記録できませんでした。もう一度お試しください。"
+            if voiceEnabled { Speaker.shared.say("記録できませんでした。もう一度お試しください。") }
             return
         }
         savedToday = transcript.split(separator: "\n").map(String.init)
@@ -151,8 +161,13 @@ struct TalkView: View {
                 try RecordStore.save(DayRecord(date: today, transcript: transcript, extraction: extraction), in: context)
             }
         } catch {
-            // The words are already saved; the summary is refreshed next time.
-            errorMessage = "記録はしました。まとめの作成は次の機会に行います（\(error.localizedDescription)）"
+            // The words are already saved (that is what matters); the summary is made again next time.
+            // Shown quietly, not as a red warning, so it does not look as if saving failed.
+            if case ClaudeError.missingAPIKey = error {
+                note = "記録しました。はじめの準備がまだなので、話した言葉のまま残しています。"
+            } else {
+                note = "記録しました。まとめは、次に話したときに作り直します。"
+            }
         }
     }
 }

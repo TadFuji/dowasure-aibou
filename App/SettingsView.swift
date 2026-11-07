@@ -9,6 +9,9 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @State private var apiKey = APIKeyStore.load()
     @State private var keyMessage: String?
+    /// Result of trying the saved key once (so a mistyped key is found now, not when the user asks something).
+    @State private var keyCheckMessage: String?
+    @State private var keyCheckOK = false
     @State private var message: String?
     @State private var confirmDelete = false
     @State private var showSetup = false
@@ -119,13 +122,25 @@ struct SettingsView: View {
                         .textContentType(.password)
                         .accessibilityIdentifier("apiKeyField")
                     Button("APIキーを保存する") {
+                        apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
                         keyMessage = APIKeyStore.save(apiKey) ? "保存しました。" : "保存できませんでした。"
+                        if keyMessage == "保存しました。" { Task { await checkKey() } }
                     }
                     .accessibilityIdentifier("saveKeyButton")
                     if let keyMessage {
                         Label(keyMessage, systemImage: keyMessage == "保存しました。" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(keyMessage == "保存しました。" ? Palette.green : Palette.red)
                             .accessibilityIdentifier("keyMessage")
+                    }
+                    if let keyCheckMessage {
+                        if keyCheckOK {
+                            Label(keyCheckMessage, systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(Palette.green)
+                                .accessibilityIdentifier("keyCheckMessage")
+                        } else {
+                            WarningText(text: keyCheckMessage)
+                                .accessibilityIdentifier("keyCheckMessage")
+                        }
                     }
                     SecureField("自然な声のキー（Google AI Studio）", text: $voiceKey)
                         .textContentType(.password)
@@ -166,6 +181,24 @@ struct SettingsView: View {
         .onAppear {
             // Open the setup items until a key is saved, so the first-time setup is easy to find.
             if apiKey.isEmpty { showSetup = true }
+        }
+    }
+
+    /// Tries the key once with a tiny request and says plainly whether it works.
+    private func checkKey() async {
+        keyCheckOK = true
+        keyCheckMessage = "キーが使えるか確かめています…"
+        let problem = await ClaudeClient(apiKey: apiKey).checkKey()
+        switch problem {
+        case nil:
+            keyCheckOK = true
+            keyCheckMessage = "キーが使えることを確かめました。"
+        case .http(let status, _)? where status == 401 || status == 403:
+            keyCheckOK = false
+            keyCheckMessage = "このキーは使えないようです。入力し直してください。"
+        case let other?:
+            keyCheckOK = false
+            keyCheckMessage = "いまは確かめられませんでした（保存はしました）。" + (other.errorDescription ?? "")
         }
     }
 
