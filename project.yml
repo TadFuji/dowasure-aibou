@@ -4,6 +4,8 @@ options:
   deploymentTarget:
     iOS: "26.0"
   createIntermediateGroups: true
+  # Japanese is the base language, so Siri matches the Japanese shortcut phrases.
+  developmentLanguage: ja
 packages:
   DowasureCore:
     path: DowasureCore

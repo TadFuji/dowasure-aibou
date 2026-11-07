@@ -87,6 +87,11 @@ struct HomeView: View {
             router.openTalk = false
             path = [.talk]
         }
+        .onChange(of: router.openAsk, initial: true) { _, open in
+            guard open else { return }
+            router.openAsk = false
+            path = [.ask]
+        }
     }
 
     private var router: AppRouter { AppRouter.shared }
