@@ -41,6 +41,9 @@ public struct Retriever: Sendable {
     public var dayCalendar: DayCalendar
     public var maxRecords: Int
 
+    /// About 100 years: the largest "◯か月前" read as a time word.
+    static let maxMonthsAgo = 1200
+
     public init(dayCalendar: DayCalendar = DayCalendar(), maxRecords: Int = 7) {
         self.dayCalendar = dayCalendar
         self.maxRecords = maxRecords
@@ -89,13 +92,15 @@ public struct Retriever: Sendable {
             return months(y, month, count: 1)
         }
         // "3か月前", "半年前": about that time, give or take three weeks
-        let monthsAgo = q.firstMatch(of: /(\d+)\s*(?:か|ヶ|カ|ケ|ヵ|箇)月前/).flatMap { Int($0.1) } ?? (q.contains("半年前") ? 6 : nil)
-        if let n = monthsAgo {
-            let center = cal.date(byAdding: .month, value: -n, to: todayStart)!
+        // Numbers are capped (about 100 years): a typed "1000000000000か月前" must not crash the date math
+        // (found by the ios-reviewer agent, 2026-11-07). Larger numbers are read as no time word.
+        let monthsAgo = q.firstMatch(of: /(\d+)\s*(?:か|ヶ|カ|ケ|ヵ|箇)月前/).flatMap { Int($0.1) }.flatMap { $0 <= Self.maxMonthsAgo ? $0 : nil }
+            ?? (q.contains("半年前") ? 6 : nil)
+        if let n = monthsAgo, let center = cal.date(byAdding: .month, value: -n, to: todayStart) {
             return range(dayCalendar.addDays(-20, to: center), min(dayCalendar.addDays(20, to: center), todayStart))
         }
         // "2週間前": that week, give or take a few days
-        if let m = q.firstMatch(of: /(\d+)\s*週間前/), let n = Int(m.1) {
+        if let m = q.firstMatch(of: /(\d+)\s*週間前/), let n = Int(m.1), n <= Self.maxMonthsAgo * 5 {
             return range(day(-7 * n - 4), min(day(-7 * n + 4), todayStart))
         }
         // Seasons: "夏ごろ", "去年の冬". Spring Mar–May, summer Jun–Aug, autumn Sep–Nov, winter Dec–Feb.
@@ -109,7 +114,7 @@ public struct Retriever: Sendable {
         if q.contains("今年") { return range(ymd(year, 1, 1), todayStart) }
 
         // "3日前"
-        if let m = q.firstMatch(of: /(\d+)日前/), let n = Int(m.1) {
+        if let m = q.firstMatch(of: /(\d+)日前/), let n = Int(m.1), n <= Self.maxMonthsAgo * 31 {
             return range(day(-n - 1), day(-n + 1))
         }
         if q.contains("おととい") || q.contains("一昨日") { return range(day(-2), day(-2)) }

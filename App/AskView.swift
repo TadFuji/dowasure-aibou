@@ -24,6 +24,9 @@ struct AskView: View {
     @State private var started = false
     /// From opening the screen until the microphone starts (the prompt is being said).
     @State private var waitingToListen = false
+    /// A hint is being said and the microphone opens right after: the button already reads "話し終わった",
+    /// so it does not change under the user's finger (elder-user-reviewer, 2026-11-07).
+    @State private var hintSpeaking = false
     /// Changes with every new question; an older question that is still speaking must not
     /// start the microphone or clear the "searching" state of the newer one.
     @State private var askGeneration = 0
@@ -126,6 +129,8 @@ struct AskView: View {
         }
         MicButton(voice: voice, idleTitle: "声でたずねる", waitingToListen: waitingToListen,
                   onCancelWaiting: cancelWaiting, onText: heardQuestion)
+            // While searching, a new question would only be dropped (ios-reviewer, 2026-11-07).
+            .disabled(isWorking)
         TextField("文字で聞く（例：先週会った眼鏡の人の名前）", text: $question, axis: .vertical)
             .font(.title2)
             .lineLimit(1...3)
@@ -145,16 +150,19 @@ struct AskView: View {
     /// While hints are shown: say a guess, ask for another hint, or ask for the answer.
     /// Speaking is the main way; typing is folded away so the bottom area has only a few big choices.
     @ViewBuilder private var hintControls: some View {
-        MicButton(voice: voice, idleTitle: "思い出したことを言う") { spoken in
+        MicButton(voice: voice, idleTitle: "思い出したことを言う", waitingToListen: hintSpeaking,
+                  onCancelWaiting: cancelHintListening) { spoken in
             respond(spoken)
         }
         HStack(spacing: 12) {
+            // "もう少しヒント" is the filled one and "答えを教えて" only outlined: the app's aim is a hint,
+            // not the answer, and the filled button is the one pressed by mistake (elder-user-reviewer, 2026-11-07).
             Button {
                 show(session?.moreHint())
             } label: {
                 Text("もう少しヒント").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: Style.dockButtonHeight)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.borderedProminent)
             .tint(Palette.orange)
             .accessibilityIdentifier("moreHintButton")
             Button {
@@ -162,7 +170,7 @@ struct AskView: View {
             } label: {
                 Text("答えを教えて").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: Style.dockButtonHeight)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .tint(Palette.orange)
             .accessibilityIdentifier("revealButton")
         }
@@ -245,13 +253,17 @@ struct AskView: View {
     private func speak(_ reply: HintSession.Reply) {
         hintTask?.cancel()
         voice.cancel()
+        hintSpeaking = false
         guard voiceEnabled, !reply.revealed else {
             say(reply.text)
             return
         }
         replyText = reply.text
         hintTask = Task {
+            hintSpeaking = true
             await Speaker.shared.sayAndWait(reply.text)
+            // A newer hint (or the answer) took over: it owns the flag now.
+            if !Task.isCancelled { hintSpeaking = false }
             // Not while the user is typing the guess.
             guard !Task.isCancelled, session?.revealed == false, !typingGuess, !voice.isListening else { return }
             await voice.start(onFinish: respond)
@@ -261,6 +273,14 @@ struct AskView: View {
     /// "話し終わった" before the microphone started: stop the prompt and do not listen.
     private func cancelWaiting() {
         waitingToListen = false
+        Speaker.shared.stop()
+        voice.cancel()
+    }
+
+    /// "話し終わった" pressed while a hint is being said: stop it and do not open the microphone.
+    private func cancelHintListening() {
+        hintTask?.cancel()
+        hintSpeaking = false
         Speaker.shared.stop()
         voice.cancel()
     }

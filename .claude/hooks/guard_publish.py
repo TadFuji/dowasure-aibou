@@ -12,6 +12,8 @@ import sys
 RISKY = [
     (re.compile(r"gh\s+repo\s+edit\b.*--visibility"), "リポジトリの公開・非公開の切り替え"),
     (re.compile(r"git\s+push\b.*(--force\b|-f\b)(?!-with-lease)"), "強制 push（履歴の書き換え）"),
+    # "git push origin +main" is a force push too (found while testing the hooks, 2026-11-07).
+    (re.compile(r"git\s+push\b.*\s\+[\w./-]+"), "強制 push（履歴の書き換え）"),
 ]
 
 

@@ -142,6 +142,14 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(t.calls == 1)
     }
 
+    @Test func otherNetworkTroubleIsPlain() async {
+        // Not the system's own text (may be English or carry a number), but the plain "could not connect".
+        let t = SequenceTransport([.network(.secureConnectionFailed)], okBody: ok)
+        await #expect(throws: ClaudeError.http(status: 0, body: "URLError \(URLError.Code.secureConnectionFailed.rawValue)")) { _ = try await extract(t) }
+        let plain = ClaudeError.from(URLError(.secureConnectionFailed)) as? ClaudeError
+        #expect(plain?.errorDescription == "うまく通信できませんでした。少し待ってから、もう一度お試しください。")
+    }
+
     @Test func timeoutIsPlainAndNotRetried() async {
         let t = SequenceTransport([.network(.timedOut)], okBody: ok)
         await #expect(throws: ClaudeError.timedOut) { _ = try await extract(t) }
@@ -153,7 +161,8 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(busy.contains("混み合って"))
         #expect(!busy.contains("529"))
         #expect(!(ClaudeError.http(status: 400, body: "").errorDescription ?? "").contains("400"))
-        #expect(ClaudeError.missingAPIKey.errorDescription == "APIキーが設定されていません。設定画面で入力してください。")
+        #expect(ClaudeError.missingAPIKey.errorDescription == "まだ使う準備ができていません。ご家族か、設定をした方に「はじめの準備」をお願いしてください。")
+        #expect(!(ClaudeError.missingAPIKey.errorDescription ?? "").contains("APIキー"))
     }
 
     @Test func checkKeyReportsWrongKey() async {
@@ -187,6 +196,13 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(retriever.dateRange(in: "昨日会った人", today: today) == "2026-11-11"..."2026-11-11")
         #expect(retriever.dateRange(in: "おとといの約束", today: today) == "2026-11-10"..."2026-11-10")
         #expect(retriever.dateRange(in: "3日前に行った店", today: today) == "2026-11-08"..."2026-11-10")
+    }
+
+    @Test func hugeNumbersDoNotCrash() {
+        // A typed question with an absurd number is read as having no time word (ios-reviewer, 2026-11-07).
+        #expect(retriever.dateRange(in: "1000000000000か月前の話", today: today) == nil)
+        #expect(retriever.dateRange(in: "99999999999999週間前の話", today: today) == nil)
+        #expect(retriever.dateRange(in: "9223372036854775807日前の話", today: today) == nil)
     }
 
     @Test func followUpReplyCorrectsTheTime() {

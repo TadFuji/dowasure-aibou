@@ -16,6 +16,8 @@ struct TalkView: View {
     @State private var note: String?
     @State private var voice = VoiceInput()
     @State private var started = false
+    /// The screen is being left: words still heard are saved without speaking over the home screen.
+    @State private var leaving = false
     /// From opening the screen until the microphone starts (the prompt is being said).
     @State private var waitingToListen = false
     /// Transcript before the last item, so a mistaken item can be taken back.
@@ -50,9 +52,9 @@ struct TalkView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("今日覚えたこと").font(.title2.bold())
                         ForEach(Array(savedToday.enumerated()), id: \.offset) { _, line in
-                            Text(line).font(.title2)
-                                // VoiceOver reads "16時05分、…" instead of "かっこ 16 コロン 05".
-                                .accessibilityLabel(Self.spokenLine(line))
+                            // "16時05分、にんじんを買う" on the screen too, not "[16:05] …": brackets and a colon are
+                            // hard to read (elder-user-reviewer, 2026-11-07), and VoiceOver reads it the same way.
+                            Text(Self.spokenLine(line)).font(.title2)
                         }
                     }
                     .padding()
@@ -68,7 +70,13 @@ struct TalkView: View {
             if (lastConfirmation != nil && voiceEnabled) || undoTranscript != nil {
                 HStack(spacing: 12) {
                     if let lastConfirmation, voiceEnabled {
-                        RepeatButton(text: lastConfirmation)
+                        // Stops listening first: speaking takes the audio away from the microphone, which
+                        // would then look as if it listens but hear nothing (ios-reviewer, 2026-11-07).
+                        RepeatButton(text: lastConfirmation) {
+                            waitingToListen = false
+                            voice.cancel()
+                            Speaker.shared.say(lastConfirmation)
+                        }
                     }
                     if undoTranscript != nil {
                         Button {
@@ -88,7 +96,7 @@ struct TalkView: View {
             if voiceEnabled {
                 MicButton(voice: voice, idleTitle: lastConfirmation == nil ? "声で話す" : "ほかにも話す",
                           waitingToListen: waitingToListen, onCancelWaiting: cancelWaiting) { spoken in
-                    Task { await remember(spoken) }
+                    Task { await rememberSpoken(spoken) }
                 }
             }
             // The field and a full-width button below it: a small text button beside the field was hard to hit.
@@ -101,7 +109,8 @@ struct TalkView: View {
                 Button {
                     let text = typed
                     typed = ""
-                    Task { await remember(text) }
+                    // Saving failed: put the words back, so they need not be typed again (ios-reviewer, 2026-11-07).
+                    Task { if !(await remember(text)), typed.isEmpty { typed = text } }
                 } label: {
                     Label("覚える", systemImage: "checkmark")
                         .font(.title2.bold())
@@ -126,12 +135,15 @@ struct TalkView: View {
                     waitingToListen = false
                     return
                 }
-                await voice.start { spoken in Task { await remember(spoken) } }
+                await voice.start { spoken in Task { await rememberSpoken(spoken) } }
                 waitingToListen = false
             }
         }
         .onDisappear {
             waitingToListen = false
+            // Words heard so far are still saved, but quietly: before this, the confirmation and the
+            // waiting tone started on the home screen (ios-reviewer, 2026-11-07).
+            leaving = true
             voice.stop()
             Speaker.shared.stopEverything()
         }
@@ -144,7 +156,7 @@ struct TalkView: View {
         voice.cancel()
     }
 
-    /// "[16:05] にんじんを買う" → "16時05分、にんじんを買う" for VoiceOver.
+    /// "[16:05] にんじんを買う" → "16時05分、にんじんを買う" for the screen and VoiceOver.
     static func spokenLine(_ line: String) -> String {
         guard line.hasPrefix("["), let close = line.firstIndex(of: "]") else { return line }
         let time = line[line.index(after: line.startIndex)..<close].split(separator: ":")
@@ -177,9 +189,24 @@ struct TalkView: View {
     }
 
     /// Saves the words at once (so nothing is lost), repeats them back, then updates the summary in the background.
-    private func remember(_ text: String) async {
+    /// Spoken words that could not be saved are put in the text field, so they need not be said again
+    /// (ios-reviewer, second look, 2026-11-07).
+    private func rememberSpoken(_ spoken: String) async {
+        if !(await remember(spoken)), typed.isEmpty, !leaving {
+            typed = spoken
+            let message = "記録できませんでした。話した言葉を下の欄に残しました。「覚える」を押してください。"
+            errorMessage = message
+            // Said aloud too, so the words on the screen and the voice tell the same thing.
+            if voiceEnabled { Speaker.shared.say(message) }
+        }
+    }
+
+    /// Returns false only when the words could not be saved.
+    @discardableResult
+    private func remember(_ text: String) async -> Bool {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !words.isEmpty else { return }
+        guard !words.isEmpty else { return true }
+        let speaks = voiceEnabled && !leaving
         // Typed during the opening words: do not open the microphone over the confirmation.
         waitingToListen = false
         voice.stop()
@@ -193,14 +220,14 @@ struct TalkView: View {
                                            extraction: existing?.extraction ?? .empty), in: context)
         } catch {
             errorMessage = "記録できませんでした。もう一度お試しください。"
-            if voiceEnabled { Speaker.shared.say("記録できませんでした。もう一度お試しください。") }
-            return
+            if speaks { Speaker.shared.say("記録できませんでした。もう一度お試しください。") }
+            return false
         }
         savedToday = transcript.split(separator: "\n").map(String.init)
         undoTranscript = existing?.transcript ?? ""
         let confirmation = MemoLog.confirmation(for: words)
         lastConfirmation = confirmation
-        if voiceEnabled {
+        if speaks {
             Speaker.shared.startWaitingTone()
             Task { await Speaker.shared.sayAndWait(confirmation) }
         }
@@ -219,5 +246,6 @@ struct TalkView: View {
                 note = "記録しました。まとめは、次に話したときに作り直します。"
             }
         }
+        return true
     }
 }
