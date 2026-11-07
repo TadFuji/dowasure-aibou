@@ -20,10 +20,13 @@ public struct Recorder: Sendable {
 public struct Answerer: Sendable {
     let client: ClaudeClient
     public var retriever: Retriever
+    /// How much the model thinks ("low", "medium", ...). nil keeps the model's default (medium on Haiku 5.5).
+    public var effort: String?
 
-    public init(client: ClaudeClient, retriever: Retriever = Retriever()) {
+    public init(client: ClaudeClient, retriever: Retriever = Retriever(), effort: String? = nil) {
         self.client = client
         self.retriever = retriever
+        self.effort = effort
     }
 
     public func answer(_ question: String, records: [DayRecord], today: Date = Date()) async throws -> VerifiedAnswer {
@@ -45,7 +48,8 @@ public struct Answerer: Sendable {
             ModelAnswer.self, model: .haiku,
             system: Prompts.answerSystem,
             user: user,
-            schema: Prompts.answerSchema)
+            schema: Prompts.answerSchema,
+            effort: effort)
         return Self.verify(raw, candidates: candidates, dayCalendar: dc)
     }
 
