@@ -81,6 +81,104 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
     }
 }
 
+/// Fake transport that answers with a list of results in order (an HTTP status or a network error).
+final class SequenceTransport: HTTPTransport, @unchecked Sendable {
+    enum Step { case status(Int), network(URLError.Code) }
+    private var steps: [Step]
+    private(set) var calls = 0
+    let okBody: String
+
+    init(_ steps: [Step], okBody: String) {
+        self.steps = steps
+        self.okBody = okBody
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        calls += 1
+        let step = steps.isEmpty ? .status(200) : steps.removeFirst()
+        switch step {
+        case .network(let code): throw URLError(code)
+        case .status(let status):
+            let http = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            return (Data((status == 200 ? okBody : "{}").utf8), http)
+        }
+    }
+}
+
+@Suite struct RetryTests {
+    let ok = FakeTransport.messages(text: #"{"summary":"散歩した","people":[],"promises":[],"places":[],"numbers":[],"events":[]}"#)
+
+    func extract(_ transport: SequenceTransport) async throws -> Extraction {
+        try await Recorder(client: ClaudeClient(apiKey: "k", transport: transport, retryDelay: 0)).extract(transcript: "x")
+    }
+
+    @Test func overloadedIsRetriedOnce() async throws {
+        let t = SequenceTransport([.status(529), .status(200)], okBody: ok)
+        #expect(try await extract(t).summary == "散歩した")
+        #expect(t.calls == 2)
+    }
+
+    @Test func secondFailureIsReportedNotRetriedAgain() async {
+        let t = SequenceTransport([.status(503), .status(503), .status(200)], okBody: ok)
+        await #expect(throws: ClaudeError.http(status: 503, body: "{}")) { _ = try await extract(t) }
+        #expect(t.calls == 2)
+    }
+
+    @Test func wrongKeyIsNotRetried() async {
+        let t = SequenceTransport([.status(401)], okBody: ok)
+        await #expect(throws: ClaudeError.http(status: 401, body: "{}")) { _ = try await extract(t) }
+        #expect(t.calls == 1)
+    }
+
+    @Test func droppedConnectionIsRetried() async throws {
+        let t = SequenceTransport([.network(.networkConnectionLost), .status(200)], okBody: ok)
+        #expect(try await extract(t).summary == "散歩した")
+        #expect(t.calls == 2)
+    }
+
+    @Test func offlineIsPlainAndNotRetried() async {
+        let t = SequenceTransport([.network(.notConnectedToInternet)], okBody: ok)
+        await #expect(throws: ClaudeError.offline) { _ = try await extract(t) }
+        #expect(t.calls == 1)
+    }
+
+    @Test func timeoutIsPlainAndNotRetried() async {
+        let t = SequenceTransport([.network(.timedOut)], okBody: ok)
+        await #expect(throws: ClaudeError.timedOut) { _ = try await extract(t) }
+        #expect(t.calls == 1)
+    }
+
+    @Test func messagesAreInPlainWords() {
+        let busy = ClaudeError.http(status: 529, body: "").errorDescription ?? ""
+        #expect(busy.contains("混み合って"))
+        #expect(!busy.contains("529"))
+        #expect(!(ClaudeError.http(status: 400, body: "").errorDescription ?? "").contains("400"))
+        #expect(ClaudeError.missingAPIKey.errorDescription == "APIキーが設定されていません。設定画面で入力してください。")
+    }
+
+    @Test func checkKeyReportsWrongKey() async {
+        let client = ClaudeClient(apiKey: "k", transport: FakeTransport(status: 401, body: "{}"))
+        #expect(await client.checkKey() == .http(status: 401, body: "{}"))
+        let good = ClaudeClient(apiKey: "k", transport: FakeTransport(status: 200, body: "{}"))
+        #expect(await good.checkKey() == nil)
+    }
+}
+
+@Suite struct FollowUpTests {
+    @Test func shortReplyJoinsEarlierQuestion() {
+        #expect(Answerer.followUpQuestion(previous: "眼鏡の人の名前", reply: " 先週 ") == "眼鏡の人の名前（先週）")
+    }
+
+    @Test func longReplyIsANewQuestion() {
+        let reply = "孫の誕生日のプレゼントに何を買うと言っていたか"
+        #expect(Answerer.followUpQuestion(previous: "眼鏡の人の名前", reply: reply) == reply)
+    }
+
+    @Test func noEarlierQuestion() {
+        #expect(Answerer.followUpQuestion(previous: nil, reply: "先週") == "先週")
+    }
+}
+
 @Suite struct RetrieverTests {
     let retriever = Retriever(dayCalendar: tokyo)
     let today = date("2026-11-12") // Thursday
@@ -309,6 +407,28 @@ func record(_ date: String, summary: String, people: [String] = [], places: [Str
     @Test func hintThatLeaksAnswerIsDropped() {
         let a = found(hints: ["森田さんという方です。", "駅前でお会いしました。"])
         #expect(a.hints == ["駅前でお会いしました。"])
+    }
+
+    @Test func wrongGuessSaysWhatWasHeard() {
+        var s = HintSession(answer: found())
+        _ = s.start()
+        let r = s.respond(to: "守田さん")
+        #expect(!r.revealed)
+        #expect(r.text.hasPrefix("「守田さん」と聞こえました。"))
+    }
+
+    @Test func allHintsLeakingLeavesADateHint() {
+        let a = found(hints: ["森田さんという方です。"])
+        #expect(a.hints == ["10月8日" + Answerer.dateHintSuffix])
+        var s = HintSession(answer: a)
+        let r = s.start()
+        #expect(!r.revealed && r.text.contains("10月8日"))
+    }
+
+    @Test func oneLetterKeywordMustBeSaidAlone() {
+        #expect(HintSession.isCorrectGuess("森", keywords: ["森"]))
+        #expect(!HintSession.isCorrectGuess("森本さん", keywords: ["森"]))
+        #expect(HintSession.isCorrectGuess("森田さんです", keywords: ["森田"]))
     }
 
     @Test func notFoundSaysSoImmediately() {
