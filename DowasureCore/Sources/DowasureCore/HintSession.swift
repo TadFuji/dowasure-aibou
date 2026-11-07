@@ -8,6 +8,12 @@ public struct HintSession: Sendable, Equatable {
         public var revealed: Bool
         /// True only when the user named the answer from the hints, before asking for it.
         public var recalledByThemselves: Bool = false
+
+        public init(text: String, revealed: Bool, recalledByThemselves: Bool = false) {
+            self.text = text
+            self.revealed = revealed
+            self.recalledByThemselves = recalledByThemselves
+        }
     }
 
     public let answer: VerifiedAnswer

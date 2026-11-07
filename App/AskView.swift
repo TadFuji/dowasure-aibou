@@ -92,7 +92,9 @@ struct AskView: View {
             askTask = nil
             hintTask?.cancel()
             hintTask = nil
-            voice.stop()
+            // cancel, not stop: stop would hand a half-heard guess to respond(), which would speak
+            // another hint and open the microphone again on the home screen.
+            voice.cancel()
             Speaker.shared.stopEverything()
         }
     }
@@ -106,7 +108,13 @@ struct AskView: View {
     /// Before a question (or after the answer): ask something new. Placed in the bottom area.
     @ViewBuilder private var askControls: some View {
         if let replyText {
-            RepeatButton(text: replyText)
+            // "見当たりません。いつ頃…？" listens after it is said; saying it again must not open
+            // the microphone in the middle (the earlier question's task is stopped first).
+            RepeatButton(text: replyText) {
+                askTask?.cancel()
+                voice.cancel()
+                Speaker.shared.say(replyText)
+            }
         }
         MicButton(voice: voice, idleTitle: "声でたずねる", onText: heardQuestion)
         TextField("文字で聞く（例：先週会った眼鏡の人の名前）", text: $question, axis: .vertical)
@@ -174,7 +182,9 @@ struct AskView: View {
         } else {
             HStack(spacing: 12) {
                 if let replyText {
-                    RepeatButton(text: replyText)
+                    // Through speak(): stops the microphone and the earlier hint first,
+                    // and opens the microphone again only after the hint has been said once more.
+                    RepeatButton(text: replyText) { repeatHint(replyText) }
                 }
                 Button {
                     voice.cancel()
@@ -237,6 +247,10 @@ struct AskView: View {
             guard !Task.isCancelled, session?.revealed == false, !typingGuess, !voice.isListening else { return }
             await voice.start(onFinish: respond)
         }
+    }
+
+    private func repeatHint(_ text: String) {
+        speak(HintSession.Reply(text: text, revealed: session?.revealed ?? true))
     }
 
     private func heardQuestion(_ spoken: String) {

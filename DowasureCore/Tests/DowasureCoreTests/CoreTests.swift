@@ -470,6 +470,18 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(!r.revealed && r.text.contains("10月8日"))
     }
 
+    @Test func dateHintIsNotUsedWhenTheDateIsTheAnswer() {
+        // "When did I note it?" → the answer is the date, so "10月8日に覚えておいたことです。" would give it away.
+        let raw = ModelAnswer(found: true, answer: "10月8日です。", evidenceDates: ["2026-10-08"], confidence: .high,
+                              followupQuestion: "", hints: ["10月8日のことです。"], answerKeywords: ["10月8日"])
+        let a = Answerer.verify(raw, candidates: [record("2026-10-08", summary: "歯医者の予約をした")], dayCalendar: tokyo)
+        #expect(a.hints.isEmpty)
+        var s = HintSession(answer: a)
+        let r = s.start()
+        #expect(r.revealed && !r.recalledByThemselves)
+        #expect(s.respond(to: "10月8日").recalledByThemselves == false)
+    }
+
     @Test func oneLetterKeywordMustBeSaidAlone() {
         #expect(HintSession.isCorrectGuess("森", keywords: ["森"]))
         #expect(!HintSession.isCorrectGuess("森本さん", keywords: ["森"]))

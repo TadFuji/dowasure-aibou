@@ -85,7 +85,12 @@ public struct Answerer: Sendable {
             var hints = raw.hints.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty && !HintSession.matches($0, keywords: keywords) }
             // If every hint was dropped, give the date as a first cue rather than the answer at once.
-            if hints.isEmpty { hints = [labels + dateHintSuffix] }
+            // When the date is itself the answer, that cue would give it away: then there is no safe hint,
+            // and HintSession says the answer plainly (not counted as recalled by themselves).
+            if hints.isEmpty {
+                let dateHint = labels + dateHintSuffix
+                if !HintSession.matches(dateHint, keywords: keywords) { hints = [dateHint] }
+            }
             return VerifiedAnswer(kind: .found(evidenceDates: evidence), answer: answer,
                                   confidence: raw.confidence, followupQuestion: followup, displayText: text,
                                   hints: hints, answerKeywords: keywords)
