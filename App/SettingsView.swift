@@ -137,9 +137,12 @@ struct SettingsView: View {
             Section {
                 DisclosureGroup(isExpanded: $showSetup) {
                     SecureField("APIキー（sk-ant-…）", text: $apiKey)
-                        // Not .password: iOS would offer to save the key in the iCloud Keychain as a password,
-                        // and the key must stay only in this app's keychain item (ios-reviewer, 2026-11-07).
-                        .textContentType(nil)
+                        // Not a password: iOS would offer to save the key in the iCloud Keychain, and the key must
+                        // stay only in this app's keychain item. A secure field is guessed to be a password even
+                        // without a type, so another type is named (ios-reviewer, 2026-11-07, and its second look).
+                        .textContentType(.oneTimeCode)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                         .submitLabel(.done)
                         .focused($keyFieldFocused)
                         .accessibilityIdentifier("apiKeyField")

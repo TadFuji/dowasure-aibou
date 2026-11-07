@@ -96,7 +96,7 @@ struct TalkView: View {
             if voiceEnabled {
                 MicButton(voice: voice, idleTitle: lastConfirmation == nil ? "声で話す" : "ほかにも話す",
                           waitingToListen: waitingToListen, onCancelWaiting: cancelWaiting) { spoken in
-                    Task { await remember(spoken) }
+                    Task { await rememberSpoken(spoken) }
                 }
             }
             // The field and a full-width button below it: a small text button beside the field was hard to hit.
@@ -110,7 +110,7 @@ struct TalkView: View {
                     let text = typed
                     typed = ""
                     // Saving failed: put the words back, so they need not be typed again (ios-reviewer, 2026-11-07).
-                    Task { if !(await remember(text)) { typed = text } }
+                    Task { if !(await remember(text)), typed.isEmpty { typed = text } }
                 } label: {
                     Label("覚える", systemImage: "checkmark")
                         .font(.title2.bold())
@@ -135,7 +135,7 @@ struct TalkView: View {
                     waitingToListen = false
                     return
                 }
-                await voice.start { spoken in Task { await remember(spoken) } }
+                await voice.start { spoken in Task { await rememberSpoken(spoken) } }
                 waitingToListen = false
             }
         }
@@ -189,6 +189,15 @@ struct TalkView: View {
     }
 
     /// Saves the words at once (so nothing is lost), repeats them back, then updates the summary in the background.
+    /// Spoken words that could not be saved are put in the text field, so they need not be said again
+    /// (ios-reviewer, second look, 2026-11-07).
+    private func rememberSpoken(_ spoken: String) async {
+        if !(await remember(spoken)), typed.isEmpty, !leaving {
+            typed = spoken
+            errorMessage = "記録できませんでした。話した言葉を下の欄に残しました。「覚える」を押してください。"
+        }
+    }
+
     /// Returns false only when the words could not be saved.
     @discardableResult
     private func remember(_ text: String) async -> Bool {
