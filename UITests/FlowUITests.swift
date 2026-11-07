@@ -52,10 +52,11 @@ final class FlowUITests: XCTestCase {
         input.typeText("にんじんを買う")
         app.buttons["sendAnswer"].tap()
         XCTAssertTrue(app.staticTexts["「にんじんを買う」ですね。覚えました。"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "] にんじんを買う")).firstMatch.exists)
+        // The saved line is read to VoiceOver as "16時05分、にんじんを買う".
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "分、にんじんを買う")).firstMatch.exists)
         app.buttons["undoButton"].tap()
         XCTAssertTrue(app.staticTexts["取り消しました。"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "] にんじんを買う")).firstMatch.exists)
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "分、にんじんを買う")).firstMatch.exists)
     }
 
     /// Saving the key shows a confirmation right under the button.

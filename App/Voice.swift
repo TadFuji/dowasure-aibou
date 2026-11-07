@@ -577,6 +577,25 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 }
 
+/// "Say it again": repeats the last reply aloud, for a user who missed it or was not looking.
+struct RepeatButton: View {
+    let text: String
+
+    var body: some View {
+        Button {
+            Speaker.shared.say(text)
+        } label: {
+            Label("もう一度きく", systemImage: "speaker.wave.2.fill")
+                .font(.title2.bold())
+                .wrapsForLargeText()
+                .frame(maxWidth: .infinity, minHeight: 64)
+        }
+        .buttonStyle(.bordered)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .accessibilityIdentifier("repeatButton")
+    }
+}
+
 /// Large microphone button shared by the talk and ask screens.
 struct MicButton: View {
     let voice: VoiceInput

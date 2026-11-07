@@ -45,6 +45,7 @@ struct AskView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
                         .accessibilityIdentifier("answerText")
+                    RepeatButton(text: replyText)
                 }
 
                 if let session, !session.revealed {
@@ -105,25 +106,31 @@ struct AskView: View {
         MicButton(voice: voice, idleTitle: "思い出したことを言う") { spoken in
             respond(spoken)
         }
-        HStack {
-            TextField("文字で答える", text: $guess)
-                .font(.title2)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityIdentifier("guessInput")
-            Button("送る") {
+        TextField("文字で答える", text: $guess)
+            .font(.title2)
+            .textFieldStyle(.roundedBorder)
+            .accessibilityIdentifier("guessInput")
+        if !guess.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Button {
                 let text = guess
                 guess = ""
                 respond(text)
+            } label: {
+                Label("送る", systemImage: "paperplane.fill")
+                    .font(.title2.bold())
+                    .wrapsForLargeText()
+                    .frame(maxWidth: .infinity, minHeight: 64)
             }
-            .font(.title2.bold())
-            .disabled(guess.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .buttonStyle(.borderedProminent)
+            .tint(Palette.orange)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
             .accessibilityIdentifier("sendGuess")
         }
         HStack(spacing: 16) {
             Button {
                 show(session?.moreHint())
             } label: {
-                Text("もう少しヒント").font(.title2.bold()).frame(maxWidth: .infinity, minHeight: 72)
+                Text("もう少しヒント").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: 72)
             }
             .buttonStyle(.bordered)
             .tint(Palette.orange)
@@ -131,7 +138,7 @@ struct AskView: View {
             Button {
                 show(session?.reveal())
             } label: {
-                Text("答えを教えて").font(.title2.bold()).frame(maxWidth: .infinity, minHeight: 72)
+                Text("答えを教えて").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: 72)
             }
             .buttonStyle(.borderedProminent)
             .tint(Palette.orange)

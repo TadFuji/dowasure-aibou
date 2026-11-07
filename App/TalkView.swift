@@ -30,23 +30,34 @@ struct TalkView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("aiQuestion")
 
+                if let lastConfirmation, voiceEnabled {
+                    RepeatButton(text: lastConfirmation)
+                }
+
                 if voiceEnabled {
                     MicButton(voice: voice, idleTitle: lastConfirmation == nil ? "声で話す" : "ほかにも話す") { spoken in
                         Task { await remember(spoken) }
                     }
                 }
-                HStack {
-                    TextField("文字で書く（例：4時に歯医者）", text: $typed, axis: .vertical)
-                        .font(.title2)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("answerInput")
-                    Button("覚える") {
+                // The field and a full-width button below it: a small text button beside the field was hard to hit.
+                TextField("文字で書く（例：4時に歯医者）", text: $typed, axis: .vertical)
+                    .font(.title2)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("answerInput")
+                if !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button {
                         let text = typed
                         typed = ""
                         Task { await remember(text) }
+                    } label: {
+                        Label("覚える", systemImage: "checkmark")
+                            .font(.title2.bold())
+                            .wrapsForLargeText()
+                            .frame(maxWidth: .infinity, minHeight: 64)
                     }
-                    .font(.title2.bold())
-                    .disabled(typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.indigo)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
                     .accessibilityIdentifier("sendAnswer")
                 }
 
@@ -56,6 +67,7 @@ struct TalkView: View {
                     } label: {
                         Label("いまのを取り消す", systemImage: "arrow.uturn.backward")
                             .font(.title2.bold())
+                            .wrapsForLargeText()
                             .frame(maxWidth: .infinity, minHeight: 64)
                     }
                     .buttonStyle(.bordered)
@@ -77,6 +89,8 @@ struct TalkView: View {
                         Text("今日覚えたこと").font(.title2.bold())
                         ForEach(Array(savedToday.enumerated()), id: \.offset) { _, line in
                             Text(line).font(.title2)
+                                // VoiceOver reads "16時05分、…" instead of "かっこ 16 コロン 05".
+                                .accessibilityLabel(Self.spokenLine(line))
                         }
                     }
                     .padding()
@@ -103,6 +117,15 @@ struct TalkView: View {
             voice.stop()
             Speaker.shared.stopEverything()
         }
+    }
+
+    /// "[16:05] にんじんを買う" → "16時05分、にんじんを買う" for VoiceOver.
+    static func spokenLine(_ line: String) -> String {
+        guard line.hasPrefix("["), let close = line.firstIndex(of: "]") else { return line }
+        let time = line[line.index(after: line.startIndex)..<close].split(separator: ":")
+        let rest = line[line.index(after: close)...].trimmingCharacters(in: .whitespaces)
+        guard time.count == 2 else { return line }
+        return "\(time[0])時\(time[1])分、\(rest)"
     }
 
     /// Takes back the last saved item (for mis-heard words), then refreshes the summary.

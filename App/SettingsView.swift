@@ -83,6 +83,7 @@ struct SettingsView: View {
                             }
                         }
                         .foregroundStyle(.primary)
+                        .accessibilityAddTraits(item.name == cloudVoiceName ? .isSelected : [])
                     }
                 } else {
                 ForEach(voices, id: \.identifier) { voice in
@@ -103,6 +104,7 @@ struct SettingsView: View {
                         }
                     }
                     .foregroundStyle(.primary)
+                    .accessibilityAddTraits(voice.identifier == currentVoiceID ? .isSelected : [])
                 }
                 }
                 Picker("速さ", selection: $speechSpeed) {
