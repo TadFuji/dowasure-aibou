@@ -199,6 +199,7 @@ struct AskView: View {
                 // Keep the first question, so "先週" said next is searched together with it.
                 if !joined { pendingQuestion = full }
                 replyText = first.text
+                isWorking = false  // the search is over; only speaking and listening remain
                 guard voiceEnabled else { return }
                 // The reply ends with a question ("when was it?"), so listen for the answer right away.
                 await Speaker.shared.sayAndWait(first.text)

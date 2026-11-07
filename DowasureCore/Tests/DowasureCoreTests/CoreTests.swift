@@ -95,7 +95,7 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         calls += 1
-        let step = steps.isEmpty ? .status(200) : steps.removeFirst()
+        let step: Step = steps.isEmpty ? .status(200) : steps.removeFirst()
         switch step {
         case .network(let code): throw URLError(code)
         case .status(let status):
