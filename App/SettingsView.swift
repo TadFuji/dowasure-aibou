@@ -137,7 +137,9 @@ struct SettingsView: View {
             Section {
                 DisclosureGroup(isExpanded: $showSetup) {
                     SecureField("APIキー（sk-ant-…）", text: $apiKey)
-                        .textContentType(.password)
+                        // Not .password: iOS would offer to save the key in the iCloud Keychain as a password,
+                        // and the key must stay only in this app's keychain item (ios-reviewer, 2026-11-07).
+                        .textContentType(nil)
                         .submitLabel(.done)
                         .focused($keyFieldFocused)
                         .accessibilityIdentifier("apiKeyField")
@@ -182,8 +184,14 @@ struct SettingsView: View {
 
             Section {
                 DisclosureGroup {
-                    Text("記録は、この iPhone の中だけにあります。iPhone の「iCloud バックアップ」がオンなら、機種変更の時に新しい iPhone へ移せます。念のため、ときどき書き出して控えを残してください。")
+                    Text("記録は、この iPhone の中だけに保存しています。iPhone の「iCloud バックアップ」がオンなら、機種変更の時に新しい iPhone へ移せます。念のため、ときどき書き出して控えを残してください。")
                         .fixedSize(horizontal: false, vertical: true)
+                    // What leaves the iPhone, said where the family reads about keeping the records.
+                    // Before this, only "記録は、この iPhone の中だけ" was written, while the natural voice sends
+                    // the sentences it reads (ios-reviewer, 2026-11-07; docs/プライバシーと安全.md).
+                    Text("外に送るもの：「あれ、何だっけ？」で聞くと、答えを探すために近い日の記録を Claude（Anthropic）に送ります。「自然な声」で読む時は、読み上げる文（ヒントや答えも含みます）を、作者の声の中継所を通して Google に送ります。声で送りたくない時は、上の「声」で「すぐ話す声」（iPhone の声）を選んでください。")
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("whatIsSent")
                     ShareLink(item: RecordsFile(records: exportRecords),
                               preview: SharePreview(RecordExport.fileName())) {
                         Label("記録を書き出す（\(exportRecords.count)日分）", systemImage: "square.and.arrow.up")
@@ -231,6 +239,8 @@ struct SettingsView: View {
             // Open the setup items until a key is saved, so the first-time setup is easy to find.
             if apiKey.isEmpty { showSetup = true }
         }
+        // A voice sample still being read must not go on over the home screen (ios-reviewer, 2026-11-07).
+        .onDisappear { Speaker.shared.stopEverything() }
     }
 
     /// Tries the key once with a tiny request and says plainly whether it works.

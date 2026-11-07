@@ -35,9 +35,11 @@ public enum ClaudeError: Error, Equatable, LocalizedError {
     /// Plain words for older users: what happened and what to do, without numbers or jargon.
     public var errorDescription: String? {
         switch self {
-        case .missingAPIKey: "APIキーが設定されていません。設定画面で入力してください。"
+        // Said to the older user, who cannot set the key alone: no "APIキー", and who to ask
+        // (elder-user-reviewer agent, 2026-11-07). The key words stay in the family part of the settings.
+        case .missingAPIKey: "まだ使う準備ができていません。ご家族か、設定をした方に「はじめの準備」をお願いしてください。"
         case .http(let status, _) where status == 401 || status == 403:
-            "APIキーが正しくないようです。設定画面で確認してください。"
+            "使う準備に問題があるようです。ご家族か、設定をした方に確かめてもらってください。"
         case .http(let status, _) where Self.isBusy(status):
             "いま混み合っています。少し待ってから、もう一度お試しください。"
         case .http: "うまく通信できませんでした。少し待ってから、もう一度お試しください。"
@@ -59,7 +61,9 @@ public enum ClaudeError: Error, Equatable, LocalizedError {
         case .cancelled: return CancellationError()
         case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff: return ClaudeError.offline
         case .timedOut: return ClaudeError.timedOut
-        default: return error
+        // Any other network trouble ("secure connection failed", "host not found", ...): plain words, never
+        // the system's own text, which may be English or show an error number (ios-reviewer, 2026-11-07).
+        default: return ClaudeError.http(status: 0, body: "URLError \(error.code.rawValue)")
         }
     }
 }

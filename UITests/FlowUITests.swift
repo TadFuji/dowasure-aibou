@@ -17,7 +17,7 @@ final class FlowUITests: XCTestCase {
         input.tap()
         input.typeText("駅前で会った眼鏡の人の名前")
         app.buttons["askSubmit"].tap()
-        XCTAssertTrue(app.staticTexts["APIキーが設定されていません。設定画面で入力してください。"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["まだ使う準備ができていません。ご家族か、設定をした方に「はじめの準備」をお願いしてください。"].waitForExistence(timeout: 10))
     }
 
     /// Turning on the evening reminder asks for permission and confirms the time.

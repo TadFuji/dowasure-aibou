@@ -62,6 +62,9 @@ final class VoiceInput {
             state = .failed("いまは音声認識を使えません。文字で入力してください。")
             return
         }
+        // The microphone is opening: the waiting tone must not keep sounding (and be heard by it).
+        // Before this, a reply cut short by "ほかにも話す" left the tone looping (ios-reviewer, 2026-11-07).
+        Speaker.shared.stopWaitingTone()
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
@@ -76,6 +79,13 @@ final class VoiceInput {
 
             let input = engine.inputNode
             let format = input.outputFormat(forBus: 0)
+            // During a phone call the microphone can report no format; installing a tap then crashes
+            // the app with an exception Swift cannot catch (ios-reviewer, 2026-11-07).
+            guard format.sampleRate > 0, format.channelCount > 0 else {
+                cleanUp()
+                state = .failed("いまはマイクを使えません。電話などが終わってから、もう一度お試しください。")
+                return
+            }
             input.removeTap(onBus: 0)
             Self.installTap(on: input, format: format, request: request)
             engine.prepare()
