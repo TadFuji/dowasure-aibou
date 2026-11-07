@@ -20,3 +20,6 @@ private-data/
 # Evaluation output
 DowasureCore/eval-results/
 screenshots-thumb/
+
+# README screenshots taken by UITests/ScreenshotTests.swift (pick and copy to docs/images/)
+screenshots-out/

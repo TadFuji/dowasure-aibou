@@ -94,7 +94,7 @@ struct SettingsView: View {
                                 Text(item.label).font(.title2)
                                 Spacer()
                                 if item.name == cloudVoiceName {
-                                    Image(systemName: "checkmark.circle.fill").font(.title).foregroundStyle(Palette.green)
+                                    Image(systemName: "checkmark.circle.fill").font(.title).foregroundStyle(Palette.greenText)
                                 }
                             }
                         }
@@ -115,7 +115,7 @@ struct SettingsView: View {
                             }
                             Spacer()
                             if voice.identifier == currentVoiceID {
-                                Image(systemName: "checkmark.circle.fill").font(.title).foregroundStyle(Palette.green)
+                                Image(systemName: "checkmark.circle.fill").font(.title).foregroundStyle(Palette.greenText)
                             }
                         }
                     }
@@ -160,14 +160,14 @@ struct SettingsView: View {
                     .accessibilityIdentifier("saveKeyButton")
                     if let keyMessage {
                         Label(keyMessage, systemImage: keyMessage == "保存しました。" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(keyMessage == "保存しました。" ? Palette.green : Palette.red)
+                            .foregroundStyle(keyMessage == "保存しました。" ? Palette.greenText : Palette.redText)
                             .accessibilityIdentifier("keyMessage")
                             .id("keyResult")
                     }
                     if let keyCheckMessage {
                         if keyCheckOK {
                             Label(keyCheckMessage, systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(Palette.green)
+                                .foregroundStyle(Palette.greenText)
                                 .accessibilityIdentifier("keyCheckMessage")
                         } else {
                             WarningText(text: keyCheckMessage)

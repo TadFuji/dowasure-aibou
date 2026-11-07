@@ -3,9 +3,9 @@
 **忘れそうなことをパッと話すと覚えてくれて、「何だっけな」の時は、答えではなくヒントで、自分で思い出すのを手伝う iPhone アプリ。**
 
 > **3行でいうと**
-> 1. **答えを教えず、思い出す手伝いをします。** 忘れそうなことを話せば覚え、「何だっけ」の時はヒントを3段で出します。ヒントに答えが漏れていないかはコードが確かめます。医療や診断はしません。
+> 1. **答えを教えず、思い出す手伝いをします。** 忘れそうなことを話せば覚え、「何だっけ」の時はヒントを3段で出します。答えの言葉がそのまま入ったヒントはコードが捨て、言い換えの漏れは別の Claude（ヒントの係）が読んで点検しました。医療や診断はしません。
 > 2. **高齢の方のために、細かいところまで作り込みました。** 65歳の藤川が実機で試し、その言葉で直す、を繰り返しました。直したことは [11行の表](#高齢者に使いやすくするために直したこと)に、藤川の言葉80件以上とうまくいかなかった案40件以上は [開発記録](docs/開発記録.md) に残しています。
-> 3. **何人もの Claude で、いろいろな方向から作り、点検しました。** 4人の係（高齢の利用者役・ヒントの審査員・iOS の技術者・大会の審査員）に点検させて26件を直しました（[係の点検](docs/係の点検.md)）。鍵の書き込みや医療めいた言葉は、フックが止めたり知らせたりします（[Claude活用](docs/Claude活用.md)）。
+> 3. **何人もの Claude で、いろいろな方向から作り、点検しました。** 4人の係（Claude Code のサブエージェント。高齢の利用者役・ヒントの審査員・iOS の技術者・大会の審査員）に点検させて26件を直しました（[係の点検](docs/係の点検.md)）。鍵の書き込みや医療めいた言葉は、フックが止めたり知らせたりします（[Claude活用](docs/Claude活用.md)）。
 
 ![iOS 26+](https://img.shields.io/badge/iOS-26%2B-1f2937)
 ![Swift 6](https://img.shields.io/badge/Swift-6-c2410c)
@@ -18,7 +18,20 @@
 > — 制作者・藤川（2026-11-03）
 
 **誰のためか**：スマホに慣れていない高齢の方。「さっき聞いた名前」「来週の約束」が、ふっと出てこない時のために。
-**どう作ったか**：Built with Claude: Japan 2026 の応募作品です。2026-11-02 から期間中に新しく作りました。制作者の藤川（65歳）はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テストを Claude Code が担当しました。
+**どう作ったか**：Built with Claude: Japan 2026 の応募作品です。2026-11-02 から期間中に新しく作りました（11/02 の最初の版は、11/03 の最初のコミットにまとめて入っています）。制作者の藤川（65歳）はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テストを Claude Code が担当しました。
+
+<!--
+【11/08 差し込み枠：デモ動画】YouTube の限定公開 URL ができたら、この注釈を消して次の2行を生かす。
+## デモ動画（3分）
+[![ど忘れ相棒 デモ動画](https://img.youtube.com/vi/動画ID/hqdefault.jpg)](https://www.youtube.com/watch?v=動画ID)
+-->
+
+<!--
+【11/08 差し込み枠：画面写真】UITests/ScreenshotTests.swift で撮った screenshots-out/ から選び、docs/images/ に入れてから、この注釈を消して次の表を生かす。写真は架空の記録だけ。
+| ホーム | 覚えておく | ヒント | 思い出せた |
+|---|---|---|---|
+| <img src="docs/images/01-home.png" width="200" alt="ホーム。大きなボタン2つが画面の下半分にある"> | <img src="docs/images/02-talk-saved.png" width="200" alt="話した言葉を読み返し、覚えましたと表示"> | <img src="docs/images/03-ask-hint.png" width="200" alt="名前を言わずにヒントを表示"> | <img src="docs/images/04-ask-recalled.png" width="200" alt="言い当てて、そうです！と表示"> |
+-->
 
 ## 3つの柱
 
@@ -47,15 +60,16 @@
 
 | 項目 | 結果 | 出典 |
 |---|---|---|
-| 答えのある質問に正しく答えた | **22 / 22** | 本物の Claude Haiku 5.5 で採点（2026-11-07、4回目） |
+| 答えのある質問に正しく答えた | **22 / 22** | 本物の Claude Haiku 5.5 で採点（2026-11-07 夜、今のコード 5c5110c） |
 | 記録に無い質問に「見当たりません」と答えた | **8 / 8** | 同上 |
-| ヒントに答えの言葉が入った（コードの点検） | **0 / 22** | 同上。出たヒントは全部、Claude も読んで確かめた |
-| 答えが出るまでの待ち時間 | 平均 4.3秒、最長 9.8秒 | 同上 |
-| 中核の単体テスト | **58件**（Mac で全件成功） | `DowasureCore/Tests`、2026-11-07 18:28 |
-| 画面の通しテスト | **6本**（本物の Claude を使う2本を含む。全件成功） | `UITests/`、2026-11-07 19:50 |
+| ヒントに答えの言葉が入った（コードの点検） | **0 / 22** | 同上 |
+| ヒントの係が読んで「漏れに近い」と判定 | 3 / 22 | 短い答え（野球・白・3勝）の最初の音。どこまで許すかは藤川が判断中（[係の点検](docs/係の点検.md)） |
+| 答えが出るまでの待ち時間 | 平均 4.4秒、最長 8.6秒 | 同上 |
+| 中核の単体テスト | **60件**（Mac で全件成功） | `DowasureCore/Tests`、2026-11-07 夜（5c5110c） |
+| 画面の通しテスト | **6本**（本物の Claude を使う2本を含む。全件成功） | `UITests/`、2026-11-07 夜（5c5110c）。ほかに README の画面写真を撮るだけのテストが1本（ふだんは飛ばす） |
 | 声の中継所のテスト | 6件（成功） | `relay/speak.test.js` |
 
-採点の問題は架空の30問で、制作側が作ったものです。良く出すぎている恐れもあります（[限界](docs/採点.md)）。
+採点の問題は架空の30問で、制作側が作ったものです。良く出すぎている恐れもあります（[限界](docs/採点.md#限界正直に)）。
 
 ## 高齢者に使いやすくするために直したこと
 
@@ -75,7 +89,7 @@
 | **間違いは取り消せる** | 「シニアフリー」「ユニバーサルデザイン」（11/03） | 「いまのを取り消す」で、直前に覚えた1件を消せる | 聞き間違いや言い間違いが怖くなくなる |
 | **鍵は1つだけ** | 「Claude の API キーと（中略）Google の API キーの2つを入力させるというのは負担になると思うんですよね」（11/07） | 声の中継所を作り、利用者が入れる鍵を1つに | 長い文字列を2回打つのは、慣れない方には大きな壁 |
 
-いちばん大事な「答えでなくヒント」も、藤川の言葉「いきなり答えをポンと言うのではなく、まずはヒントを」（11/03）から生まれました。ヒントの決まりは本物の Claude で4回採点し、出たヒントを全部読んで3回直しています（[採点.md](docs/採点.md)）。決まりの全体とコードの場所は [docs/ユニバーサルデザイン.md](docs/ユニバーサルデザイン.md)。
+いちばん大事な「答えでなくヒント」も、藤川の言葉「いきなり答えをポンと言うのではなく、まずはヒントを」（11/03）から生まれました。ヒントの決まりは、本物の Claude で採点しては直す、を繰り返しました（採点で3回、係の点検で3回）（[採点.md](docs/採点.md)）。決まりの全体とコードの場所は [docs/ユニバーサルデザイン.md](docs/ユニバーサルデザイン.md)。
 
 ## こういう人たちに点検させました
 
@@ -183,14 +197,15 @@ AI に任せるのは「言葉づくり」だけです。答えを漏らさな�
 
 **ヒントの3段**：① 場面（いつ・どこで）② 手がかり（特徴・間柄）③ 最初の1音（数字なら桁数と最初の数字）。答えの2文字以上、読み、言い換えは禁止と指示文に書いてあります。
 
-**ヒントの決まりは採点で4回直しました**（2026-11-07）。コードの点検は4回とも漏れ0件でしたが、出たヒントを全部読むと、言い換えの漏れが見つかりました。
+**ヒントの決まりは、採点しては直す、を繰り返しました**（2026-11-07。採点で3回、係の点検で3回）。コードの点検は毎回漏れ0件でしたが、出たヒントを全部読むと、言い換えの漏れが見つかりました。
 
 | 回 | 見つかったこと | 直したこと |
 |---|---|---|
 | 1 | 考える量（effort）を low にすると速い（平均2.4秒）が、「雪のような色」（白）と言い換えで答えを言う | 考える量は既定のまま |
 | 2 | 数のヒントが「4けたの数字です」だけで弱い | 桁数と最初の数字の両方を言う |
 | 3 | 答えが1けたの時、「最初の数字は『はち』」が答えそのもの | 1けたの時は最初の数字を言わない |
-| 4 | 正答 22/22、作り話 0、漏れは見つからず | 残る弱点は開発記録の「これからやること」に記載 |
+| 4 | 正答 22/22、作り話 0。ここまでの点検では漏れは見つからず | — |
+| 5〜7（係の点検） | ヒントの係が1つずつ読むと、自動では0件でも漏れや言い直しがあった（計5問）。最後は短い答えの最初の音が漏れに近い（3/22） | 2つ目は記録の新しい手がかりを入れる、など。短い答えの扱いは藤川が判断中（[係の点検](docs/係の点検.md)） |
 
 ## 記録の保存（1〜2年使う前提）
 
@@ -316,11 +331,11 @@ open DowasureAibou.xcodeproj
 
 アプリを起動したら、設定の「はじめの準備（ご家族向け）」で **Claude API の鍵を1つだけ** 入れます（[Anthropic Console](https://console.anthropic.com/) で作成）。
 
-自然な声のための Google の鍵は、利用者には入れてもらいません。作者が置いた「声の中継所」（[`relay/`](relay/)、Vercel で動く小さなサーバー）が鍵を持ち、読み上げる文を Gemini に取り次ぎます。中継所は文を保存せず、決まったモデル・声・400文字までの頼みだけを通します。使いすぎを防ぐ上限（相手ごとに1時間20回、全体で1時間60回）があり、Google 側の1日の枠を超えると断られるので、費用は増え続けません。中継所が使えない時は、同梱の録音（[`App/Resources/Voice`](App/Resources/Voice)）と iPhone の声で話します。自分で立てる場合は `relay/` を Vercel に置き、環境変数 `GEMINI_API_KEY` に有料の Gemini API の鍵を入れ、`CloudVoice.relayEndpoint` をその URL に変えます。
+自然な声のための Google の鍵は、利用者には入れてもらいません。作者が置いた「声の中継所」（[`relay/`](relay/)、Vercel で動く小さなサーバー）が鍵を持ち、読み上げる文を Gemini に取り次ぎます。中継所は文を保存せず、決まったモデル・声・400文字までの頼みだけを通します。使いすぎを防ぐ目安の上限（相手ごとに1時間20回、全体で1時間60回。サーバー1台ごとに数えるので厳密ではありません）があり、Google 側の1日の枠を超えると断られるので、費用は増え続けません。中継所が使えない時は、同梱の録音（[`App/Resources/Voice`](App/Resources/Voice)）と iPhone の声で話します。自分で立てる場合は `relay/` を Vercel に置き、環境変数 `GEMINI_API_KEY` に有料の Gemini API の鍵を入れ、`CloudVoice.relayEndpoint` をその URL に変えます。
 
 | 種類 | 実行 | 内容 |
 |---|---|---|
-| 単体テスト（58件） | `cd DowasureCore && swift test` | 検索、答えの点検、ヒントの進め方、時期の言葉、書き出し、待ち時間など（AI は模擬の応答） |
+| 単体テスト（60件） | `cd DowasureCore && swift test` | 検索、答えの点検、ヒントの進め方、時期の言葉、書き出し、待ち時間など（AI は模擬の応答） |
 | 採点（検索だけ） | `cd DowasureCore && swift run DowasureEval` | 通信なし。正しい日が候補に入った 22/22、1位で当たった 21/22 |
 | 採点（本物の AI） | `cd DowasureCore && swift run DowasureEval --live` | 鍵を `secrets/anthropic_api_key` に置いた時だけ。`--effort` で考える量を切り替え |
 | 画面の通しテスト（6本） | `xcodebuild test -project DowasureAibou.xcodeproj -scheme DowasureAibou -destination 'platform=iOS Simulator,id=<機種のid>'` | 記録と取り消し、鍵の保存、お知らせ、ヒントから答え、本物の Claude での答え |
@@ -379,7 +394,7 @@ open DowasureAibou.xcodeproj
 
 **How the hints stay honest.** One call to Claude Haiku 5.5 per question, with structured outputs (JSON schema) and prompt caching. Code does the rest: on-device retrieval picks at most 7 days to send; `Answerer.verify` keeps only evidence dates that were actually sent (otherwise "not found") and drops any hint that contains the answer; the "from the record of Nov 4" wording is built in code; guesses are matched on the device. A workflow, not an autonomous agent.
 
-**Results.** Live eval on 30 fictional questions: 22/22 correct, 8/8 "not found" for questions with no record, 0/22 hints leaking the answer by the code check (every hint was also read by Claude; the hint rules were revised four times after paraphrase leaks were found). 58 core unit tests and 6 UI tests, all passing on a Mac on 2026-11-07. The eval set is small and was written by the maker's side, so it may be optimistic.
+**Results.** Live eval on 30 fictional questions: 22/22 correct, 8/8 "not found" for questions with no record, 0/22 hints leaking the answer by the code check (a separate Claude reviewer still judged 3/22 hints for very short answers as near-leaks; the hint rules were revised again and again). 60 core unit tests and 6 UI tests, all passing on a Mac on 2026-11-07. The eval set is small and was written by the maker's side, so it may be optimistic.
 
 **Built for one to two years of use.** Records live only on the iPhone in SwiftData (one row per day, stored as JSON); no server, no iCloud sync. Spoken words are saved first, so a failed summary never loses them. The family can export all records as a text file. If the store cannot be opened, the app still starts, says so, and never deletes the file. Search understands "last year", "three months ago" and seasons.
 

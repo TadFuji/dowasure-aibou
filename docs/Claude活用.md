@@ -1,9 +1,9 @@
 # Claude Code の使い方
 
 > **3行でいうと**
-> 1. **答えを教えず、思い出す手伝いをします。** 忘れそうなことを話せば覚え、「何だっけ」の時はヒントを3段で出します。ヒントに答えが漏れていないかはコードが確かめます。医療や診断はしません。
+> 1. **答えを教えず、思い出す手伝いをします。** 忘れそうなことを話せば覚え、「何だっけ」の時はヒントを3段で出します。答えの言葉がそのまま入ったヒントはコードが捨て、言い換えの漏れは別の Claude（ヒントの係）が読んで点検しました。医療や診断はしません。
 > 2. **高齢の方のために、細かいところまで作り込みました。** 65歳の藤川が実機で試し、その言葉で直す、を繰り返しました。直したことは [11行の表](../README.md#高齢者に使いやすくするために直したこと)に、藤川の言葉80件以上とうまくいかなかった案40件以上は [開発記録](開発記録.md) に残しています。
-> 3. **何人もの Claude で、いろいろな方向から作り、点検しました。** 4人の係（高齢の利用者役・ヒントの審査員・iOS の技術者・大会の審査員）に点検させて26件を直しました（[係の点検](係の点検.md)）。鍵の書き込みや医療めいた言葉は、フックが止めたり知らせたりします（[Claude活用](Claude活用.md)）。
+> 3. **何人もの Claude で、いろいろな方向から作り、点検しました。** 4人の係（Claude Code のサブエージェント。高齢の利用者役・ヒントの審査員・iOS の技術者・大会の審査員）に点検させて26件を直しました（[係の点検](係の点検.md)）。鍵の書き込みや医療めいた言葉は、フックが止めたり知らせたりします（[Claude活用](Claude活用.md)）。
 
 制作者の藤川はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テスト・記録を Claude Code が担当しました。ここでは、Claude Code のどの機能を、なぜ選び、どこで効いたかを残します。最終更新：2026-11-07 夜。
 
@@ -50,8 +50,8 @@ flowchart LR
 | **フック：医療めいた言葉** | [`check_wording.py`](../.claude/hooks/check_wording.py)（PostToolUse） | 医療アドバイスの AI は大会の失格例。人が見落としやすい言葉を機械に見張らせる。「医療や診断は行いません」のような断り書きは通す | 11/07 16:18 に、知らせる例と通す例を流して確かめた。見張るのは `App/` と中核のコードだけ |
 | **フック：終える前の確認** | [`finish_check.py`](../.claude/hooks/finish_check.py)（Stop） | 「できました」の前に、中核を変えていれば `swift test`（Mac だけ）。コードを変えたのに開発記録が無ければ知らせる（藤川の常設依頼） | 11/07 16:25、作った直後に、このフック自身が「開発記録に追記が無い」と言い続ける不具合を見つけた。git が日本語のファイル名を記号の列で出すためで、`-z` で直した |
 | **git フック（pre-commit）** | [`.githooks/pre-commit`](../.githooks/pre-commit) | 公開リポジトリが必須なので、初日から鍵と `secrets/`・`private-data/` を仕組みで止める | 11/02 16:04 に作った。11/03 15:33、Gemini の鍵（`AIza…`）が増えたのに止めていないと気づき、形を足した |
-| **GitHub Actions「点検」** | [`.github/workflows/secret-scan.yml`](../.github/workflows/secret-scan.yml)、[`check_links.py`](../.github/scripts/check_links.py) | pre-commit を有効にし忘れた時の二重の守り。Ubuntu で数秒の軽い点検だけにした | 11/03 15:40 から。11/07 夜までに130回動き、失敗0回（GitHub の API で確認）。11/07 夜、リンクの点検を、別の文書の見出しへのリンクまで確かめるように直した |
-| **自動テスト** | [`CoreTests.swift`](../DowasureCore/Tests/DowasureCoreTests/CoreTests.swift)、[`FlowUITests.swift`](../UITests/FlowUITests.swift) | 藤川はコードを読めない。「できました」は必ず動かして確かめる | 中核の単体テスト58件・画面の通しテスト6本（数えた）。11/07 18:28 に藤川の Mac で全部成功。11/07 16:30〜16:45、ときどき落ちる画面テストを、Mac が残した記録から原因（帯に重なる位置を押していた）を特定して直した（4回中2回失敗 → 4回すべて成功） |
+| **GitHub Actions「点検」** | [`.github/workflows/secret-scan.yml`](../.github/workflows/secret-scan.yml)、[`check_links.py`](../.github/scripts/check_links.py) | pre-commit を有効にし忘れた時の二重の守り。Ubuntu で数秒の軽い点検だけにした | 11/03 15:40 から。11/07 23:00 までに168回動いた（GitHub の API で確認。130回の時点で失敗0回、その後の main の最新も成功）。11/07 夜、リンクの点検を、別の文書の見出しへのリンクまで確かめるように直した |
+| **自動テスト** | [`CoreTests.swift`](../DowasureCore/Tests/DowasureCoreTests/CoreTests.swift)、[`FlowUITests.swift`](../UITests/FlowUITests.swift) | 藤川はコードを読めない。「できました」は必ず動かして確かめる | 中核の単体テスト60件・画面の通しテスト6本（数えた）。今のコード（5c5110c）で藤川の Mac で全部成功。11/07 16:30〜16:45、ときどき落ちる画面テストを、Mac が残した記録から原因（帯に重なる位置を押していた）を特定して直した（4回中2回失敗 → 4回すべて成功） |
 | **採点ツール** | [`DowasureEval/main.swift`](../DowasureCore/Sources/DowasureEval/main.swift) | ヒントの指示文を変えるたびに、同じ30問で比べるため。`--effort` で AI が考える量も比べられる | 11/07 17:45〜18:00 に4回採点し、ヒントの決まりを3回直した（下の「アプリの中の AI」） |
 | **並行スレッド** | 開発記録 | 制作・調査・リポジトリの整備を、互いに止めずに進めるため。整備のスレッドはコードを触らない | 11/03 15:30 調査スレッド、15:33 整備スレッド。11/07 は3本の作業（PR #4・#5・#6）が同時に動いた。17:35 に「コンフリクトは起こさないでしょうか？」と聞かれ、新しい作業を止めて、18:00 からまとめ役のスレッド1本で順にまとめた（PR #8） |
 | **MCP（iOS シミュレーター操作）** | 開発記録 | コードだけでは分からない「見え方」を、撮影とタップで確かめる | 11/02 16:19 から。日本語の入力と撮影では失敗があり、使い方を変えた（下の表） |
@@ -75,14 +75,14 @@ flowchart LR
 
 | 仕事 | だれが | 実物 |
 |---|---|---|
-| 候補日を最大7日に絞る | コード（端末内） | [`Retriever.swift`](../DowasureCore/Sources/DowasureCore/Retriever.swift#L44) |
+| 候補日を最大7日に絞る | コード（端末内） | [`Retriever.swift`](../DowasureCore/Sources/DowasureCore/Retriever.swift#L142) |
 | 答え・ヒント3つ・正解とみなす言葉・根拠の日付を作る | AI（1回だけ呼ぶ） | [`Prompts.answerSystem`](../DowasureCore/Sources/DowasureCore/Prompts.swift#L55) |
 | 根拠の日付を「AI に渡した日」だけに絞り、日付の文を組み立てる | コード | [`Answerer.verify`](../DowasureCore/Sources/DowasureCore/Services.swift#L73) |
 | 答えの漏れたヒントを捨てる | コード | [`Services.swift` 84〜93行](../DowasureCore/Sources/DowasureCore/Services.swift#L84-L93)、[`HintSession.matches`](../DowasureCore/Sources/DowasureCore/HintSession.swift#L98) |
 | ヒント → 言い当て → 答え、と進める | コード（追加の呼び出しなし） | [`HintSession.swift`](../DowasureCore/Sources/DowasureCore/HintSession.swift) |
 
 - **構造化出力**（`output_config.format` に JSON スキーマ）：決まった形で受け取り、コードで確かめる。
-- **プロンプトキャッシュ**：固定の指示文に `cache_control` を付ける（[`ClaudeClient.swift`](../DowasureCore/Sources/DowasureCore/ClaudeClient.swift#L100)）。
+- **プロンプトキャッシュ**：固定の指示文に `cache_control` を付ける（[`ClaudeClient.swift`](../DowasureCore/Sources/DowasureCore/ClaudeClient.swift#L104)）。
 - **混雑と通信切れは1回だけやり直す**（429・529・5xx）。待ち時間の上限は30秒（11/07 11:50）。
 - **ワークフロー型**：自律エージェントにせず、手順をコードで決める。11/02 に読んだ Anthropic の「Building Effective Agents」に合わせた。
 - **Managed Agents は使わない**：会話がサーバー側に保存されるため、「記録を端末の外に保存しない」と合わない。
