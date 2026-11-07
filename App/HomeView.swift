@@ -27,7 +27,7 @@ struct HomeView: View {
                             Label {
                                 Text(recallMessage)
                             } icon: {
-                                Image(systemName: "star.fill").foregroundStyle(Palette.green)
+                                Image(systemName: "star.fill").foregroundStyle(Palette.greenText)
                             }
                                 .font(.title2.bold())
                                 .fixedSize(horizontal: false, vertical: true)

@@ -16,9 +16,10 @@ description: 提出前に、非公開のリポジトリを公開へ戻す前の�
 ```bash
 git log -p --all | grep -nE 'sk-ant-[A-Za-z0-9_-]{10,}|AIza[0-9A-Za-z_-]{35}'   # 何も出ないこと
 git ls-files | grep -E '^(secrets|private-data)/'                              # 何も出ないこと
-git log --all --format='%ae' | sort -u                                          # noreply のアドレスだけ
+git log --all --format='%ae%n%ce' | sort | uniq -c                               # noreply と fujikawa@gmail.com だけ
 ```
 
+- 作者・記録者のアドレスは、GitHub と Anthropic の noreply と、藤川さんの fujikawa@gmail.com（GitHub の画面でマージした時に入る）だけであること。fujikawa@gmail.com は 2026-11-07 20:12 に藤川さんが「問題ありません」と決めた（履歴は書き換えない）。
 - GitHub Actions「点検」が main で成功していること。
 - 藤川さんの本物の記録、他人の実名、電話番号、住所が入っていないこと（`Fixtures/`、`SampleData.swift`、`docs/`、画像）。
 - スクリーンショットや動画に、本物の記録や鍵が写っていないこと。

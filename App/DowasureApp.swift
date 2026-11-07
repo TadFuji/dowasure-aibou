@@ -89,6 +89,20 @@ enum Palette {
     static let orange = Color(red: 178 / 255, green: 77 / 255, blue: 0)
     static let green = Color(red: 0, green: 122 / 255, blue: 61 / 255)
     static let red = Color(red: 196 / 255, green: 30 / 255, blue: 30 / 255)
+
+    /// Green and red for words and marks on the screen's own background (not for white text on a fill).
+    /// In light mode they are the colors above. On a dark background those are only 2.9 to 3.9:1, so dark
+    /// mode uses lighter ones: green 7.9 and red 6.7 on the dark list rows (#1C1C1E), checked by
+    /// calculation (2026-11-07). Light mode does not change.
+    static let greenText = adaptive(light: (0, 122, 61), dark: (70, 200, 120))
+    static let redText = adaptive(light: (196, 30, 30), dark: (255, 122, 112))
+
+    private static func adaptive(light: (Int, Int, Int), dark: (Int, Int, Int)) -> Color {
+        Color(uiColor: UIColor { traits in
+            let c = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat(c.0) / 255, green: CGFloat(c.1) / 255, blue: CGFloat(c.2) / 255, alpha: 1)
+        })
+    }
 }
 
 /// Error or warning text: never color alone, always with an icon and words.
@@ -97,7 +111,7 @@ struct WarningText: View {
     var body: some View {
         Label(text, systemImage: "exclamationmark.triangle.fill")
             .font(.title2)
-            .foregroundStyle(Palette.red)
+            .foregroundStyle(Palette.redText)
     }
 }
 

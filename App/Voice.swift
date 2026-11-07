@@ -791,7 +791,7 @@ struct MicStatus: View {
                 // The moment to speak, told by sight as well as the vibration: works with the volume at 0.
                 Label("どうぞ、お話しください", systemImage: "mic.fill")
                     .font(.title.bold())
-                    .foregroundStyle(Palette.green)
+                    .foregroundStyle(Palette.greenText)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
