@@ -1,6 +1,7 @@
 import AVFoundation
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 import DowasureCore
 
 /// Settings. Items the user changes (reminder, voice) come first in large type;
@@ -14,6 +15,9 @@ struct SettingsView: View {
     @State private var keyCheckOK = false
     @State private var message: String?
     @State private var confirmDelete = false
+    /// Read when the settings open (not on every redraw), for the export button.
+    @State private var exportRecords: [DayRecord] = []
+    @State private var deleteMessage: String?
     @State private var showSetup = false
     @State private var voiceKey = APIKeyStore.load(account: APIKeyStore.voiceAccount)
     @State private var voiceKeyMessage: String?
@@ -158,7 +162,6 @@ struct SettingsView: View {
                     }
                     Button("架空の記録を入れる") { loadSamples() }
                         .accessibilityIdentifier("loadSamples")
-                    Button("すべての記録を消す", role: .destructive) { confirmDelete = true }
                     if let message {
                         Text(message).accessibilityIdentifier("settingsMessage")
                     }
@@ -167,16 +170,47 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("setupGroup")
             }
+
+            Section {
+                DisclosureGroup {
+                    Text("記録は、この iPhone の中だけにあります。iPhone の「iCloud バックアップ」がオンなら、機種変更の時に新しい iPhone へ移せます。念のため、ときどき書き出して控えを残してください。")
+                        .fixedSize(horizontal: false, vertical: true)
+                    ShareLink(item: RecordsFile(records: exportRecords),
+                              preview: SharePreview(RecordExport.fileName())) {
+                        Label("記録を書き出す（\(exportRecords.count)日分）", systemImage: "square.and.arrow.up")
+                            .wrapsForLargeText()
+                    }
+                    .disabled(exportRecords.isEmpty)
+                    .accessibilityIdentifier("exportRecords")
+                    DisclosureGroup {
+                        Text("消すと元に戻せません。先に「記録を書き出す」で控えを残してください。")
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("すべての記録を消す", role: .destructive) { confirmDelete = true }
+                            .accessibilityIdentifier("deleteAllRecords")
+                        if let deleteMessage {
+                            Text(deleteMessage).accessibilityIdentifier("deleteMessage")
+                        }
+                    } label: {
+                        Text("記録を消す")
+                    }
+                    .accessibilityIdentifier("deleteGroup")
+                } label: {
+                    Text("記録の保管（ご家族向け）").font(.title3)
+                }
+                .onAppear { exportRecords = RecordStore.allRecords(context) }
+                .accessibilityIdentifier("keepingGroup")
+            }
         }
         .font(.title3)
         .elderScreen("設定")
-        .confirmationDialog("すべての記録を消しますか？元に戻せません。", isPresented: $confirmDelete, titleVisibility: .visible) {
+        .confirmationDialog("\(exportRecords.count)日分の記録を、すべて消しますか？元に戻せません。", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("消す", role: .destructive) {
                 do {
                     try RecordStore.deleteAll(in: context)
-                    message = "記録を消しました。"
+                    exportRecords = []
+                    deleteMessage = "記録を消しました。"
                 } catch {
-                    message = "消せませんでした。"
+                    deleteMessage = "消せませんでした。"
                 }
             }
         }
@@ -233,6 +267,19 @@ struct SettingsView: View {
         }
     }
 
+    /// The export as a .txt file, so it can be saved to Files, AirDrop'ed or mailed with a clear name.
+    struct RecordsFile: Transferable {
+        /// The text is made only when the user actually shares, not on every redraw.
+        let records: [DayRecord]
+        static var transferRepresentation: some TransferRepresentation {
+            FileRepresentation(exportedContentType: .plainText) { file in
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent(RecordExport.fileName())
+                try Data(RecordExport.text(file.records).utf8).write(to: url, options: .atomic)
+                return SentTransferredFile(url)
+            }
+        }
+    }
+
     /// Adds the made-up records only on days that have no record yet, so real records are never replaced.
     private func loadSamples() {
         do {
@@ -246,6 +293,7 @@ struct SettingsView: View {
                 try RecordStore.save(record, in: context)
                 added += 1
             }
+            exportRecords = RecordStore.allRecords(context)
             message = skipped == 0
                 ? "架空の記録を入れました。"
                 : "架空の記録を\(added)日分入れました。本物の記録がある\(skipped)日には入れていません。"

@@ -7,9 +7,20 @@ import DowasureCore
 struct DowasureApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     let container: ModelContainer
+    /// True when the saved records could not be opened (the app then still starts, and says so).
+    @State private var storageProblem = false
 
     init() {
-        container = try! ModelContainer(for: StoredDay.self)
+        do {
+            container = try ModelContainer(for: StoredDay.self)
+        } catch {
+            // Never crash at launch, and never delete the records file: keep it for a later try or repair.
+            // New words go to a temporary place until the app is opened again.
+            print("Cannot open the records: \(error)")
+            container = try! ModelContainer(for: StoredDay.self,
+                                            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            _storageProblem = State(initialValue: true)
+        }
         #if DEBUG
         // Launch arguments used only by UI tests to start from a known state (not in the App Store build).
         let args = ProcessInfo.processInfo.arguments
@@ -57,6 +68,11 @@ struct DowasureApp: App {
         WindowGroup {
             HomeView()
                 .task { Speaker.shared.prewarm() }
+                .alert("これまでの記録を開けませんでした", isPresented: $storageProblem) {
+                    Button("わかりました") {}
+                } message: {
+                    Text("記録は消していません。iPhone を再起動してから、もう一度アプリを開いてください。それまでに話したことは、アプリを閉じると残りません。")
+                }
         }
         .modelContainer(container)
     }

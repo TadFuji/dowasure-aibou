@@ -480,3 +480,19 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(MemoLog.confirmation(for: " にんじんを買う ") == "「にんじんを買う」ですね。覚えました。")
     }
 }
+
+@Suite struct RecordExportTests {
+    @Test func oldestFirstWithSpokenWordsAndSummary() {
+        let records = [
+            DayRecord(date: "2026-11-11", transcript: "[16:05] にんじんを買う", extraction: Extraction(summary: "買い物の予定。")),
+            DayRecord(date: "2026-11-09", transcript: "", extraction: Extraction(summary: "書道教室に行った。")),
+        ]
+        let text = RecordExport.text(records, exportedOn: date("2026-11-12"), dayCalendar: tokyo)
+        #expect(text.hasPrefix("ど忘れ相棒の記録（2026年11月12日に書き出し、2日分）"))
+        let first = text.range(of: "■ 2026年11月9日")!.lowerBound
+        let second = text.range(of: "■ 2026年11月11日")!.lowerBound
+        #expect(first < second)
+        #expect(text.contains("話したこと:\n[16:05] にんじんを買う\nまとめ: 買い物の予定。"))
+        #expect(RecordExport.fileName(exportedOn: date("2026-11-12"), dayCalendar: tokyo) == "ど忘れ相棒の記録_2026-11-12.txt")
+    }
+}
