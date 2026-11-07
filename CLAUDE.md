@@ -34,7 +34,7 @@ cd "/Volumes/ROCKET_XTRM/coding/Built with Claude" && xcodegen generate && xcode
 ```
 
 - 実 API を使う画面テスト（testAskWithKeyAnswersWithDate）は `secrets/anthropic_api_key` があるときだけ動く。キーは起動時の環境変数でアプリ（DEBUG ビルドのみ）に渡り、キーチェーンに保存される。
-- シミュレーターは専用の `Dowasure-iPhone`（iOS 26.5）を使う。
+- シミュレーターは専用の `Dowasure-iPhone`（iOS 26.5）を使う。2026-11-07、`name=Dowasure-iPhone` の指定では Xcode が最新の iOS の機種として探して止まった。`xcrun simctl list devices` で id を調べ、`-destination 'platform=iOS Simulator,id=<id>'` で指定する。
 
 ## 既知の問題
 
