@@ -27,6 +27,8 @@ struct AskView: View {
     @State private var askGeneration = 0
     /// Speaking a hint and then listening for the guess; replaced by the next hint or answer.
     @State private var hintTask: Task<Void, Never>?
+    /// The user chose to type the guess instead of saying it.
+    @State private var typingGuess = false
 
     /// UI tests run without speech output or microphone.
     private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
@@ -109,29 +111,10 @@ struct AskView: View {
     }
 
     /// While hints are shown: say a guess, ask for another hint, or ask for the answer.
+    /// Speaking is the main way; typing is folded away so the screen has only three big choices.
     @ViewBuilder private var hintControls: some View {
         MicButton(voice: voice, idleTitle: "思い出したことを言う") { spoken in
             respond(spoken)
-        }
-        TextField("文字で答える", text: $guess)
-            .font(.title2)
-            .textFieldStyle(.roundedBorder)
-            .accessibilityIdentifier("guessInput")
-        if !guess.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            Button {
-                let text = guess
-                guess = ""
-                respond(text)
-            } label: {
-                Label("送る", systemImage: "paperplane.fill")
-                    .font(.title2.bold())
-                    .wrapsForLargeText()
-                    .frame(maxWidth: .infinity, minHeight: 64)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Palette.orange)
-            .clipShape(RoundedRectangle(cornerRadius: 20))
-            .accessibilityIdentifier("sendGuess")
         }
         HStack(spacing: 16) {
             Button {
@@ -150,6 +133,42 @@ struct AskView: View {
             .buttonStyle(.borderedProminent)
             .tint(Palette.orange)
             .accessibilityIdentifier("revealButton")
+        }
+        // Without voice (or once asked for), the typing field is shown.
+        if typingGuess || !voiceEnabled {
+            TextField("文字で答える", text: $guess)
+                .font(.title2)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("guessInput")
+            if !guess.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button {
+                    let text = guess
+                    guess = ""
+                    respond(text)
+                } label: {
+                    Label("送る", systemImage: "paperplane.fill")
+                        .font(.title2.bold())
+                        .wrapsForLargeText()
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Palette.orange)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .accessibilityIdentifier("sendGuess")
+            }
+        } else {
+            Button {
+                voice.cancel()
+                Speaker.shared.stop()
+                typingGuess = true
+            } label: {
+                Label("文字で答える", systemImage: "keyboard")
+                    .font(.title3)
+                    .wrapsForLargeText()
+                    .frame(maxWidth: .infinity, minHeight: 56)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("typeGuessButton")
         }
     }
 
@@ -183,7 +202,8 @@ struct AskView: View {
         replyText = reply.text
         hintTask = Task {
             await Speaker.shared.sayAndWait(reply.text)
-            guard !Task.isCancelled, session?.revealed == false, !voice.isListening else { return }
+            // Not while the user is typing the guess.
+            guard !Task.isCancelled, session?.revealed == false, !typingGuess, !voice.isListening else { return }
             await voice.start(onFinish: respond)
         }
     }
@@ -210,6 +230,7 @@ struct AskView: View {
         errorMessage = nil
         replyText = nil
         session = nil
+        typingGuess = false
         defer { if generation == askGeneration { isWorking = false } }
         let full = Answerer.followUpQuestion(previous: pendingQuestion, reply: question)
         // True when the reply was joined to the earlier question; false when it is a new question.
