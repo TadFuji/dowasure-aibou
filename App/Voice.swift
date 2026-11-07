@@ -128,6 +128,12 @@ final class VoiceInput {
         if !finished.isEmpty { callback?(finished) }
     }
 
+    /// Ends listening without handing over what was heard (e.g. the user pressed a button instead).
+    func cancel() {
+        onFinish = nil
+        stop()
+    }
+
     private func cleanUp() {
         recognitionID += 1
         silenceTimer?.invalidate()

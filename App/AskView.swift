@@ -25,6 +25,8 @@ struct AskView: View {
     /// Changes with every new question; an older question that is still speaking must not
     /// start the microphone or clear the "searching" state of the newer one.
     @State private var askGeneration = 0
+    /// Speaking a hint and then listening for the guess; replaced by the next hint or answer.
+    @State private var hintTask: Task<Void, Never>?
 
     /// UI tests run without speech output or microphone.
     private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
@@ -76,6 +78,8 @@ struct AskView: View {
         .onDisappear {
             askTask?.cancel()
             askTask = nil
+            hintTask?.cancel()
+            hintTask = nil
             voice.stop()
             Speaker.shared.stopEverything()
         }
@@ -153,18 +157,35 @@ struct AskView: View {
         guard var s = session else { return }
         let reply = s.respond(to: words)
         session = s
-        say(reply.text)
+        speak(reply)
     }
 
     private func show(_ reply: HintSession.Reply?) {
         guard let reply else { return }
         // moreHint()/reveal() mutate the session; re-read it after the call.
-        say(reply.text)
+        speak(reply)
     }
 
     private func say(_ text: String) {
         replyText = text
         Speaker.shared.say(text)
+    }
+
+    /// A hint ends with "言ってみてください", so the microphone opens by itself once it has been said.
+    /// The answer (revealed) is only said.
+    private func speak(_ reply: HintSession.Reply) {
+        hintTask?.cancel()
+        voice.cancel()
+        guard voiceEnabled, !reply.revealed else {
+            say(reply.text)
+            return
+        }
+        replyText = reply.text
+        hintTask = Task {
+            await Speaker.shared.sayAndWait(reply.text)
+            guard !Task.isCancelled, session?.revealed == false, !voice.isListening else { return }
+            await voice.start(onFinish: respond)
+        }
     }
 
     private func heardQuestion(_ spoken: String) {
@@ -177,7 +198,8 @@ struct AskView: View {
         guard !isWorking else { return }
         // The previous question may still be speaking "見当たりません…" (isWorking is already false then).
         askTask?.cancel()
-        voice.stop()
+        hintTask?.cancel()
+        voice.cancel()
         askGeneration += 1
         let mine = askGeneration
         askTask = Task { await ask(generation: mine) }
@@ -215,7 +237,7 @@ struct AskView: View {
                 await voice.start(onFinish: heardQuestion)
             } else {
                 pendingQuestion = nil
-                say(first.text)
+                speak(first)
             }
         } catch {
             Speaker.shared.stopWaitingTone()
