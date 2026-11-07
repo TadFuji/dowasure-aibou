@@ -23,57 +23,16 @@ struct TalkView: View {
     private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
 
     var body: some View {
+        // Top half: only things to read. Bottom half: every button, within reach of the right thumb (藤川さん, 2026-11-07).
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text(lastConfirmation ?? Self.prompt)
                     .font(.title.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("aiQuestion")
 
-                if let lastConfirmation, voiceEnabled {
-                    RepeatButton(text: lastConfirmation)
-                }
-
-                if voiceEnabled {
-                    MicButton(voice: voice, idleTitle: lastConfirmation == nil ? "声で話す" : "ほかにも話す") { spoken in
-                        Task { await remember(spoken) }
-                    }
-                }
-                // The field and a full-width button below it: a small text button beside the field was hard to hit.
-                TextField("文字で書く（例：4時に歯医者）", text: $typed, axis: .vertical)
-                    .font(.title2)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("answerInput")
-                if !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Button {
-                        let text = typed
-                        typed = ""
-                        Task { await remember(text) }
-                    } label: {
-                        Label("覚える", systemImage: "checkmark")
-                            .font(.title2.bold())
-                            .wrapsForLargeText()
-                            .frame(maxWidth: .infinity, minHeight: 64)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.indigo)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .accessibilityIdentifier("sendAnswer")
-                }
-
-                if undoTranscript != nil {
-                    Button {
-                        Task { await undoLast() }
-                    } label: {
-                        Label("いまのを取り消す", systemImage: "arrow.uturn.backward")
-                            .font(.title2.bold())
-                            .wrapsForLargeText()
-                            .frame(maxWidth: .infinity, minHeight: 64)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("undoButton")
-                }
-
+                MicStatus(voice: voice)
                 if let errorMessage {
                     WarningText(text: errorMessage)
                 }
@@ -81,6 +40,7 @@ struct TalkView: View {
                     Label(note, systemImage: "checkmark.circle")
                         .font(.title3)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("saveNote")
                 }
 
@@ -101,7 +61,56 @@ struct TalkView: View {
             }
             .padding(24)
         }
-        .elderScreen("覚えておくこと")
+        .elderScreen("覚えておくこと") {
+            // "もう一度きく" and "いまのを取り消す" side by side, so the bottom area stays short.
+            if (lastConfirmation != nil && voiceEnabled) || undoTranscript != nil {
+                HStack(spacing: 12) {
+                    if let lastConfirmation, voiceEnabled {
+                        RepeatButton(text: lastConfirmation)
+                    }
+                    if undoTranscript != nil {
+                        Button {
+                            Task { await undoLast() }
+                        } label: {
+                            Label("いまのを取り消す", systemImage: "arrow.uturn.backward")
+                                .font(.title2.bold())
+                                .wrapsForLargeText()
+                                .frame(maxWidth: .infinity, minHeight: 64)
+                        }
+                        .buttonStyle(.bordered)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .accessibilityIdentifier("undoButton")
+                    }
+                }
+            }
+            if voiceEnabled {
+                MicButton(voice: voice, idleTitle: lastConfirmation == nil ? "声で話す" : "ほかにも話す") { spoken in
+                    Task { await remember(spoken) }
+                }
+            }
+            // The field and a full-width button below it: a small text button beside the field was hard to hit.
+            TextField("文字で書く（例：4時に歯医者）", text: $typed, axis: .vertical)
+                .font(.title2)
+                .lineLimit(1...3)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("answerInput")
+            if !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button {
+                    let text = typed
+                    typed = ""
+                    Task { await remember(text) }
+                } label: {
+                    Label("覚える", systemImage: "checkmark")
+                        .font(.title2.bold())
+                        .wrapsForLargeText()
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.indigo)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .accessibilityIdentifier("sendAnswer")
+            }
+        }
         .task {
             guard !started else { return }
             started = true

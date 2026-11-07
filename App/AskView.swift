@@ -33,9 +33,9 @@ struct AskView: View {
     /// UI tests run without speech output or microphone.
     private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
 
-    private var revealed: Bool { session?.revealed ?? false }
-
     var body: some View {
+        // Top half: only things to read (the question, the hint, what the microphone hears).
+        // Bottom half: every button, within reach of the right thumb (藤川さん, 2026-11-07).
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if let askedQuestion {
@@ -52,22 +52,32 @@ struct AskView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
                         .accessibilityIdentifier("answerText")
-                    RepeatButton(text: replyText)
                 }
-
-                if let session, !session.revealed {
-                    hintControls
-                } else {
-                    askControls
+                if !inHints {
+                    Text(session == nil ? Self.prompt : "ほかに思い出したいことはありますか？")
+                        .font(.title.bold())
+                        .fixedSize(horizontal: false, vertical: true)
+                    if pendingQuestion != nil {
+                        Text("短くお答えいただくと、前の質問とあわせて探します。")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-
+                MicStatus(voice: voice)
                 if let errorMessage {
                     WarningText(text: errorMessage)
                 }
             }
             .padding(24)
         }
-        .elderScreen("あれ、何だっけ？")
+        .elderScreen("あれ、何だっけ？") {
+            if inHints {
+                hintControls
+            } else {
+                askControls
+            }
+        }
         .task {
             // Like the talk screen: invite the question in words, then listen, so the user need not find a button.
             guard !started else { return }
@@ -87,40 +97,45 @@ struct AskView: View {
         }
     }
 
-    /// Before a question (or after the answer): ask something new.
+    /// Hints are being given (not yet answered).
+    private var inHints: Bool {
+        if let session { return !session.revealed }
+        return false
+    }
+
+    /// Before a question (or after the answer): ask something new. Placed in the bottom area.
     @ViewBuilder private var askControls: some View {
-        Text(session == nil ? Self.prompt : "ほかに思い出したいことはありますか？")
-            .font(.title.bold())
-        if pendingQuestion != nil {
-            Text("短くお答えいただくと、前の質問とあわせて探します。")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        if let replyText {
+            RepeatButton(text: replyText)
         }
-        MicButton(voice: voice, onText: heardQuestion)
+        MicButton(voice: voice, idleTitle: "声でたずねる", onText: heardQuestion)
         TextField("文字で聞く（例：先週会った眼鏡の人の名前）", text: $question, axis: .vertical)
             .font(.title2)
-            .lineLimit(2...4)
+            .lineLimit(1...3)
             .textFieldStyle(.roundedBorder)
             .accessibilityIdentifier("askInput")
-        BigButton(title: isWorking ? "探しています…" : "聞いてみる", systemImage: "magnifyingglass", color: Palette.orange) {
-            startAsking()
+        // Shown once something is typed (or while searching), so the bottom area stays short.
+        if isWorking || !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            BigButton(title: isWorking ? "探しています…" : "聞いてみる", systemImage: "magnifyingglass",
+                      color: Palette.orange, height: Style.dockButtonHeight) {
+                startAsking()
+            }
+            .disabled(isWorking)
+            .accessibilityIdentifier("askSubmit")
         }
-        .disabled(isWorking || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        .accessibilityIdentifier("askSubmit")
     }
 
     /// While hints are shown: say a guess, ask for another hint, or ask for the answer.
-    /// Speaking is the main way; typing is folded away so the screen has only three big choices.
+    /// Speaking is the main way; typing is folded away so the bottom area has only a few big choices.
     @ViewBuilder private var hintControls: some View {
         MicButton(voice: voice, idleTitle: "思い出したことを言う") { spoken in
             respond(spoken)
         }
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             Button {
                 show(session?.moreHint())
             } label: {
-                Text("もう少しヒント").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: 72)
+                Text("もう少しヒント").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: Style.dockButtonHeight)
             }
             .buttonStyle(.bordered)
             .tint(Palette.orange)
@@ -128,7 +143,7 @@ struct AskView: View {
             Button {
                 show(session?.reveal())
             } label: {
-                Text("答えを教えて").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: 72)
+                Text("答えを教えて").font(.title2.bold()).wrapsForLargeText().frame(maxWidth: .infinity, minHeight: Style.dockButtonHeight)
             }
             .buttonStyle(.borderedProminent)
             .tint(Palette.orange)
@@ -157,18 +172,24 @@ struct AskView: View {
                 .accessibilityIdentifier("sendGuess")
             }
         } else {
-            Button {
-                voice.cancel()
-                Speaker.shared.stop()
-                typingGuess = true
-            } label: {
-                Label("文字で答える", systemImage: "keyboard")
-                    .font(.title3)
-                    .wrapsForLargeText()
-                    .frame(maxWidth: .infinity, minHeight: 56)
+            HStack(spacing: 12) {
+                if let replyText {
+                    RepeatButton(text: replyText)
+                }
+                Button {
+                    voice.cancel()
+                    Speaker.shared.stop()
+                    typingGuess = true
+                } label: {
+                    Label("文字で答える", systemImage: "keyboard")
+                        .font(.title2.bold())
+                        .wrapsForLargeText()
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                }
+                .buttonStyle(.bordered)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .accessibilityIdentifier("typeGuessButton")
             }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("typeGuessButton")
         }
     }
 

@@ -697,7 +697,7 @@ struct RepeatButton: View {
     }
 }
 
-/// Large microphone button shared by the talk and ask screens.
+/// Large microphone button shared by the talk and ask screens (placed in the bottom area; see MicStatus).
 struct MicButton: View {
     let voice: VoiceInput
     var idleTitle = "声で話す"
@@ -722,11 +722,21 @@ struct MicButton: View {
         .tint(voice.isListening ? Palette.red : Palette.green)
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityIdentifier("micButton")
+    }
+}
 
+/// What the microphone hears, or why it could not listen. Shown in the reading area at the top,
+/// while the microphone button itself sits at the bottom within reach of the thumb.
+struct MicStatus: View {
+    let voice: VoiceInput
+
+    var body: some View {
         if voice.isListening {
-            Text(voice.text.isEmpty ? "どうぞ、お話しください…" : voice.text)
+            Label(voice.text.isEmpty ? "どうぞ、お話しください…" : voice.text, systemImage: "mic.fill")
                 .font(.title2)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("micStatus")
         }
         if case .failed(let message) = voice.state {
             WarningText(text: message)

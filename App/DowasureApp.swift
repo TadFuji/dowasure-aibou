@@ -104,12 +104,17 @@ struct WarningText: View {
 enum Style {
     static let bigButtonHeight: CGFloat = 120
     static let homeButtonHeight: CGFloat = 80
+    /// Buttons in the bottom area of a screen (hint choices, "聞いてみる"): still large, but several must fit there.
+    static let dockButtonHeight: CGFloat = 72
+    /// The reading area at the top never shrinks below this, even with the largest text size.
+    static let readingMinHeight: CGFloat = 140
 }
 
 struct BigButton: View {
     let title: String
     let systemImage: String
     let color: Color
+    var height: CGFloat = Style.bigButtonHeight
     let action: () -> Void
 
     var body: some View {
@@ -117,7 +122,7 @@ struct BigButton: View {
             Label(title, systemImage: systemImage)
                 .font(.title.bold())
                 .wrapsForLargeText()
-                .frame(maxWidth: .infinity, minHeight: Style.bigButtonHeight)
+                .frame(maxWidth: .infinity, minHeight: height)
         }
         .buttonStyle(.borderedProminent)
         .tint(color)
@@ -125,10 +130,35 @@ struct BigButton: View {
     }
 }
 
-/// Every screen other than home: large title at the top, and a large "back to home" button
-/// at the bottom instead of the small arrow in the corner.
-struct ElderScreen: ViewModifier {
+/// The bottom area of a screen, where every button goes (2026-11-07, 藤川さん：「iPhoneを右手で持ったときに、
+/// 親指はiPhoneに対して下半分しか使えません」). The top of the screen is left for things to read.
+/// It is as tall as its buttons; only when they do not fit (the largest text sizes) does it scroll.
+struct ThumbDock<Content: View>: View {
+    @ViewBuilder let content: Content
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 12) { content }
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(maxHeight: contentHeight > 0 ? contentHeight : .infinity)
+        .background(.background)
+        .overlay(alignment: .top) { Divider() }
+        .layoutPriority(1)
+    }
+}
+
+/// Every screen other than home: large title at the top, then the things to read (scrolling),
+/// and at the bottom, within reach of the thumb, the screen's buttons and a large "back to home" button
+/// (instead of the small arrow in the top corner).
+struct ElderScreen<Actions: View>: ViewModifier {
     let title: String
+    let actions: Actions
     @Environment(\.dismiss) private var dismiss
 
     func body(content: Content) -> some View {
@@ -139,31 +169,36 @@ struct ElderScreen: ViewModifier {
                 .padding(.horizontal, 24)
                 .padding(.top, 8)
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(minHeight: Style.readingMinHeight)
+            ThumbDock {
+                actions
+                Button {
+                    Speaker.shared.stopEverything()
+                    dismiss()
+                } label: {
+                    Label("ホームにもどる", systemImage: "house.fill")
+                        .font(.title.bold())
+                        .wrapsForLargeText()
+                        .frame(maxWidth: .infinity, minHeight: Style.homeButtonHeight)
+                }
+                .buttonStyle(.bordered)
+                .tint(.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .accessibilityIdentifier("homeButton")
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .bottom) {
-            Button {
-                Speaker.shared.stopEverything()
-                dismiss()
-            } label: {
-                Label("ホームにもどる", systemImage: "house.fill")
-                    .font(.title.bold())
-                    .wrapsForLargeText()
-                    .frame(maxWidth: .infinity, minHeight: Style.homeButtonHeight)
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .padding(.horizontal, 24)
-            .padding(.bottom, 8)
-            .background(.background)
-            .accessibilityIdentifier("homeButton")
-        }
     }
 }
 
 extension View {
-    func elderScreen(_ title: String) -> some View { modifier(ElderScreen(title: title)) }
+    func elderScreen(_ title: String) -> some View { modifier(ElderScreen(title: title, actions: EmptyView())) }
+
+    /// `actions` are the screen's buttons; they are placed in the bottom half, above "ホームにもどる".
+    func elderScreen<Actions: View>(_ title: String, @ViewBuilder actions: () -> Actions) -> some View {
+        modifier(ElderScreen(title: title, actions: actions()))
+    }
 
     /// With the largest text sizes, labels wrap onto more lines instead of being cut off with "…".
     func wrapsForLargeText() -> some View {

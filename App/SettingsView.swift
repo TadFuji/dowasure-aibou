@@ -19,6 +19,8 @@ struct SettingsView: View {
     @State private var exportRecords: [DayRecord] = []
     @State private var deleteMessage: String?
     @State private var showSetup = false
+    /// Height of the settings list, to start the items lower on the screen.
+    @State private var formHeight: CGFloat = 0
     @AppStorage(Speaker.cloudVoiceKey) private var cloudVoiceName = CloudVoice.defaultVoiceName
     @AppStorage(Speaker.voiceModeKey) private var voiceMode = "cloud"
     @AppStorage("speechSpeed") private var speechSpeed = "slow"
@@ -44,6 +46,16 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            // The settings start from the middle of the screen, within reach of the right thumb
+            // (藤川さん, 2026-11-07). Above them, only a short note to read.
+            Section {
+                Text("項目は画面の下の方から並んでいます。指で上へずらすと、続きが出てきます。")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.clear)
+                    .accessibilityIdentifier("settingsGuide")
+            }
             Section {
                 Toggle("毎晩お知らせする", isOn: $reminderEnabled)
                     .font(.title2.bold())
@@ -186,6 +198,8 @@ struct SettingsView: View {
             }
         }
         .font(.title3)
+        .contentMargins(.top, formHeight * 0.3, for: .scrollContent)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { formHeight = $0 }
         .elderScreen("設定")
         .confirmationDialog("\(exportRecords.count)日分の記録を、すべて消しますか？元に戻せません。", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("消す", role: .destructive) {
