@@ -766,3 +766,47 @@ struct MicStatus: View {
         }
     }
 }
+
+
+/// Watches the iPhone's volume, so a muted phone is noticed: the app talks, and with the volume at 0
+/// the user just waits in silence (2026-11-07, 藤川さん：「音量をゼロにしていました」).
+@MainActor @Observable
+final class VolumeWatcher {
+    static let shared = VolumeWatcher()
+    /// Below this the voice is practically not heard.
+    static let lowLimit: Float = 0.06
+
+    private(set) var volume: Float
+    @ObservationIgnored private var observation: NSKeyValueObservation?
+
+    private init() {
+        let session = AVAudioSession.sharedInstance()
+        volume = session.outputVolume
+        observation = session.observe(\.outputVolume, options: [.new]) { _, change in
+            guard let value = change.newValue else { return }
+            Task { @MainActor in VolumeWatcher.shared.volume = value }
+        }
+    }
+
+    var isTooLow: Bool { volume < Self.lowLimit }
+}
+
+/// Shown at the top of every screen while the volume is (almost) 0. Words and a mark, not color alone.
+struct VolumeWarning: View {
+    private let watcher = VolumeWatcher.shared
+    /// UI tests run with sound off; the warning would only get in the way there.
+    private let enabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
+
+    var body: some View {
+        if enabled && watcher.isTooLow {
+            Label("音が出ません。iPhone の横のボタンで、音を大きくしてください。", systemImage: "speaker.slash.fill")
+                .font(.title2.bold())
+                .foregroundStyle(Palette.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Palette.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityIdentifier("volumeWarning")
+        }
+    }
+}
