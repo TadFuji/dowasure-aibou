@@ -5,6 +5,8 @@ import DowasureCore
 /// "What was it again?" Gives hints first so the user can recall by themselves;
 /// the answer (with the record's date) comes when they name it or ask for it.
 struct AskView: View {
+    static let prompt = "何を思い出したいですか？"
+
     @Environment(\.modelContext) private var context
     @State private var question = ""
     @State private var guess = ""
@@ -15,12 +17,27 @@ struct AskView: View {
     @State private var voice = VoiceInput()
     /// The running question, cancelled when the user leaves the screen.
     @State private var askTask: Task<Void, Never>?
+    /// The question being answered, shown above the hints so a mis-heard question can be noticed.
+    @State private var askedQuestion: String?
+    /// Set after "not found, when was it?": the next short reply is searched together with it.
+    @State private var pendingQuestion: String?
+    @State private var started = false
+
+    /// UI tests run without speech output or microphone.
+    private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
 
     private var revealed: Bool { session?.revealed ?? false }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if let askedQuestion {
+                    Text("「\(askedQuestion)」について")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("askedQuestion")
+                }
                 if let replyText {
                     Text(replyText)
                         .font(.title.bold())
@@ -43,6 +60,15 @@ struct AskView: View {
             .padding(24)
         }
         .elderScreen("あれ、何だっけ？")
+        .task {
+            // Like the talk screen: invite the question in words, then listen, so the user need not find a button.
+            guard !started else { return }
+            started = true
+            guard voiceEnabled else { return }
+            await Speaker.shared.sayAndWait(Self.prompt)
+            guard !Task.isCancelled, !voice.isListening, !isWorking, session == nil else { return }
+            await voice.start(onFinish: heardQuestion)
+        }
         .onDisappear {
             askTask?.cancel()
             askTask = nil
@@ -53,12 +79,15 @@ struct AskView: View {
 
     /// Before a question (or after the answer): ask something new.
     @ViewBuilder private var askControls: some View {
-        Text(session == nil ? "何を思い出したいですか？" : "ほかに思い出したいことはありますか？")
+        Text(session == nil ? Self.prompt : "ほかに思い出したいことはありますか？")
             .font(.title.bold())
-        MicButton(voice: voice) { spoken in
-            question = spoken
-            startAsking()
+        if pendingQuestion != nil {
+            Text("短くお答えいただくと、前の質問とあわせて探します。")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        MicButton(voice: voice, onText: heardQuestion)
         TextField("文字で聞く（例：先週会った眼鏡の人の名前）", text: $question, axis: .vertical)
             .font(.title2)
             .lineLimit(2...4)
@@ -128,6 +157,11 @@ struct AskView: View {
         Speaker.shared.say(text)
     }
 
+    private func heardQuestion(_ spoken: String) {
+        question = spoken
+        startAsking()
+    }
+
     /// Starts one question at a time (a spoken and a typed question must not run together).
     private func startAsking() {
         guard !isWorking else { return }
@@ -140,17 +174,33 @@ struct AskView: View {
         replyText = nil
         session = nil
         defer { isWorking = false }
+        let full = Answerer.followUpQuestion(previous: pendingQuestion, reply: question)
+        // True when the reply was joined to the earlier question; false when it is a new question.
+        let joined = full != question.trimmingCharacters(in: .whitespacesAndNewlines)
+        askedQuestion = full
         do {
             Speaker.shared.startWaitingTone()
             let answerer = Answerer(client: ClaudeClient(apiKey: APIKeyStore.load()))
-            let answer = try await answerer.answer(question, records: RecordStore.allRecords(context))
+            let answer = try await answerer.answer(full, records: RecordStore.allRecords(context))
             // The user went back home while waiting: do not speak the hint over the home screen.
             guard !Task.isCancelled else { return }
             var s = HintSession(answer: answer)
             let first = s.start()
             session = s
             question = ""
-            say(first.text)
+            if case .notFound = answer.kind {
+                // Keep the first question, so "先週" said next is searched together with it.
+                if !joined { pendingQuestion = full }
+                replyText = first.text
+                guard voiceEnabled else { return }
+                // The reply ends with a question ("when was it?"), so listen for the answer right away.
+                await Speaker.shared.sayAndWait(first.text)
+                guard !Task.isCancelled, !voice.isListening else { return }
+                await voice.start(onFinish: heardQuestion)
+            } else {
+                pendingQuestion = nil
+                say(first.text)
+            }
         } catch {
             Speaker.shared.stopWaitingTone()
             guard !Task.isCancelled else { return }

@@ -49,6 +49,18 @@ public struct Answerer: Sendable {
         return Self.verify(raw, candidates: candidates, dayCalendar: dc)
     }
 
+    /// After "not found, when was it?", a short reply such as "先週" belongs to the earlier question,
+    /// so both are searched together. A longer reply is taken as a new question.
+    public static func followUpQuestion(previous: String?, reply: String) -> String {
+        let reply = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let previous = previous?.trimmingCharacters(in: .whitespacesAndNewlines), !previous.isEmpty,
+              reply.count <= maxFollowUpLength else { return reply }
+        return "\(previous)（\(reply)）"
+    }
+
+    /// Replies up to this many characters are treated as an answer to the follow-up question.
+    public static let maxFollowUpLength = 15
+
     /// Keeps only evidence dates that belong to records actually sent to the model,
     /// and composes the date part of the reply in code (not by the model).
     public static func verify(_ raw: ModelAnswer, candidates: [DayRecord], dayCalendar: DayCalendar) -> VerifiedAnswer {

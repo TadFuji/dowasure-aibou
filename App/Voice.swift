@@ -498,7 +498,8 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
     }
 
     /// Sentences the app always says. Their audio is kept on the iPhone so they play without waiting.
-    nonisolated static let fixedPhrases = ["覚えておきたいことを、話してください。", "今日も一日、おつかれさまでした。", "取り消しました。"]
+    nonisolated static let fixedPhrases = ["覚えておきたいことを、話してください。", "今日も一日、おつかれさまでした。", "取り消しました。",
+                                           "何を思い出したいですか？"]
 
     nonisolated private static func style(for speed: String) -> String {
         // Older listeners hear lower, slower, clearly articulated speech best.
