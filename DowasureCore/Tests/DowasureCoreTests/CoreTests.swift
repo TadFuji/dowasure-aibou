@@ -197,6 +197,30 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(retriever.dateRange(in: kept, today: today) == "2026-11-11"..."2026-11-11")
     }
 
+    @Test func timeWordsForLongUse() {
+        // Used for a year or two: months, months ago, seasons and last year.
+        #expect(retriever.dateRange(in: "5月に会った人", today: today) == "2026-05-01"..."2026-05-31")
+        #expect(retriever.dateRange(in: "12月の集まり", today: today) == "2025-12-01"..."2025-12-31")
+        #expect(retriever.dateRange(in: "去年の5月の旅行", today: today) == "2025-05-01"..."2025-05-31")
+        #expect(retriever.dateRange(in: "3か月前に行った店", today: today) == "2026-07-23"..."2026-09-01")
+        #expect(retriever.dateRange(in: "三ヶ月前に行った店", today: today) == "2026-07-23"..."2026-09-01")
+        #expect(retriever.dateRange(in: "半年前の約束", today: today) == "2026-04-22"..."2026-06-01")
+        #expect(retriever.dateRange(in: "2週間前に会った人", today: today) == "2026-10-25"..."2026-11-02")
+        #expect(retriever.dateRange(in: "夏ごろに買った物", today: today) == "2026-06-01"..."2026-08-31")
+        #expect(retriever.dateRange(in: "冬に行った温泉", today: today) == "2025-12-01"..."2026-02-28")
+        #expect(retriever.dateRange(in: "去年の夏の旅行", today: today) == "2025-06-01"..."2025-08-31")
+        #expect(retriever.dateRange(in: "去年会った人", today: today) == "2025-01-01"..."2025-12-31")
+        #expect(retriever.dateRange(in: "今年の初めに", today: today) == "2026-01-01"..."2026-11-12")
+    }
+
+    @Test func kanjiNumbersBecomeDigitsOnlyBeforeTimeUnits() {
+        #expect(Retriever.arabicNumerals("三か月前") == "3か月前")
+        #expect(Retriever.arabicNumerals("十二月") == "12月")
+        #expect(Retriever.arabicNumerals("二十日前") == "20日前")
+        #expect(Retriever.arabicNumerals("一昨日の話") == "一昨日の話")
+        #expect(Retriever.arabicNumerals("三田さん") == "三田さん")
+    }
+
     @Test func weeksAndMonths() {
         #expect(retriever.dateRange(in: "先週、駅前で会った人", today: today) == "2026-11-02"..."2026-11-08")
         #expect(retriever.dateRange(in: "今週の予定", today: today) == "2026-11-09"..."2026-11-12")
