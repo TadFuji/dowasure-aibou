@@ -194,7 +194,10 @@ struct TalkView: View {
     private func rememberSpoken(_ spoken: String) async {
         if !(await remember(spoken)), typed.isEmpty, !leaving {
             typed = spoken
-            errorMessage = "記録できませんでした。話した言葉を下の欄に残しました。「覚える」を押してください。"
+            let message = "記録できませんでした。話した言葉を下の欄に残しました。「覚える」を押してください。"
+            errorMessage = message
+            // Said aloud too, so the words on the screen and the voice tell the same thing.
+            if voiceEnabled { Speaker.shared.say(message) }
         }
     }
 
