@@ -21,6 +21,8 @@ struct SettingsView: View {
     @State private var showSetup = false
     /// Height of the settings list, to start the items lower on the screen.
     @State private var formHeight: CGFloat = 0
+    /// The key field; the keyboard is closed on saving so "保存しました。" is not hidden behind it.
+    @FocusState private var keyFieldFocused: Bool
     @AppStorage(Speaker.cloudVoiceKey) private var cloudVoiceName = CloudVoice.defaultVoiceName
     @AppStorage(Speaker.voiceModeKey) private var voiceMode = "cloud"
     @AppStorage("speechSpeed") private var speechSpeed = "slow"
@@ -135,8 +137,10 @@ struct SettingsView: View {
                     SecureField("APIキー（sk-ant-…）", text: $apiKey)
                         .textContentType(.password)
                         .submitLabel(.done)
+                        .focused($keyFieldFocused)
                         .accessibilityIdentifier("apiKeyField")
                     Button("APIキーを保存する") {
+                        keyFieldFocused = false
                         apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
                         keyMessage = APIKeyStore.save(apiKey) ? "保存しました。" : "保存できませんでした。"
                         if keyMessage == "保存しました。" { Task { await checkKey() } }
