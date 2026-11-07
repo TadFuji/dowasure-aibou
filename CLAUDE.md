@@ -42,6 +42,7 @@ cd "/Volumes/ROCKET_XTRM/coding/Built with Claude" && xcodegen generate && xcode
 
 ## 既知の問題
 
+- 2026-11-07、画面テストを続けて流すと、テストの部品の起動が "Busy"（Application failed preflight checks）で失敗することがあった。20秒ほど間をあけてから流し直す。
 - 画面テストの最中に `simctl ui content_size` などで表示設定を変えると、シミュレーターの SpringBoard が XCTAutomationSupport 内で落ちた（2026-11-03）。テスト中は設定を変えない。
 
 - Gemini TTS は Tier 1 で1モデルあたり1日100回まで（2026-11-03 確認）。上限時は gemini-3.8-flash-tts に切り替える。試験で藤川さんの枠を使わない（`--voice-demo` や自己点検 `-voice-selftest` は必要な時だけ）。
