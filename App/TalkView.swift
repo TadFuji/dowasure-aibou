@@ -86,6 +86,8 @@ struct TalkView: View {
             loadToday()
             if voiceEnabled {
                 await Speaker.shared.sayAndWait(Self.prompt)
+                // Left the screen during the prompt, or already listening from the button: do nothing.
+                guard !Task.isCancelled, !voice.isListening else { return }
                 await voice.start { spoken in Task { await remember(spoken) } }
             }
         }

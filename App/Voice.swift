@@ -25,14 +25,28 @@ final class VoiceInput {
     private var task: SFSpeechRecognitionTask?
     private var silenceTimer: Timer?
     private var onFinish: ((String) -> Void)?
+    /// True while permission is being asked, before listening begins (so a second tap does not start twice).
+    private var isStarting = false
+    /// Changes on every start and on stop(); a start that was overtaken (e.g. the screen was left) gives up.
+    private var startToken = 0
+    /// Identifies the current recognition, so late callbacks from an earlier one are ignored.
+    private var recognitionID = 0
 
     var isListening: Bool { state == .listening }
 
     func start(onFinish: @escaping (String) -> Void) async {
-        guard state != .listening else { return }
+        // Decide before the first await: two quick calls must not both start the microphone.
+        guard state != .listening, !isStarting else { return }
+        isStarting = true
+        startToken += 1
+        let mine = startToken
+        defer { if mine == startToken { isStarting = false } }
         self.onFinish = onFinish
         text = ""
-        guard await Self.requestPermissions() else {
+        let allowed = await Self.requestPermissions()
+        // stop() was called while waiting (e.g. the user went back to the home screen): do not start.
+        guard mine == startToken else { return }
+        guard allowed else {
             state = .failed("マイクと音声認識を許可してください（設定アプリ → ど忘れ相棒）。")
             return
         }
@@ -63,8 +77,11 @@ final class VoiceInput {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             resetSilenceTimer()
 
+            recognitionID += 1
+            let id = recognitionID
             task = Self.startRecognition(recognizer: recognizer, request: request) { [weak self] transcript, done, errorText in
-                guard let self else { return }
+                // Late news from a recognition that was already stopped must not touch the current one.
+                guard let self, id == self.recognitionID, self.state == .listening else { return }
                 if let transcript {
                     self.text = transcript
                     self.resetSilenceTimer()
@@ -86,7 +103,13 @@ final class VoiceInput {
     }
 
     /// Ends listening and hands the recognized text to the caller once.
+    /// Also cancels a start that is still waiting for permission.
     func stop() {
+        if isStarting {
+            startToken += 1
+            isStarting = false
+            onFinish = nil
+        }
         guard state == .listening else { return }
         cleanUp()
         state = .idle
@@ -98,6 +121,7 @@ final class VoiceInput {
     }
 
     private func cleanUp() {
+        recognitionID += 1
         silenceTimer?.invalidate()
         silenceTimer = nil
         if engine.isRunning { engine.stop() }
