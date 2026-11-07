@@ -418,6 +418,18 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(r.revealed)
         #expect(r.text.hasPrefix("そうです！"))
         #expect(r.text.contains("10月8日の記録より"))
+        #expect(r.recalledByThemselves)
+        #expect(s.hintsGiven == 1)
+    }
+
+    @Test func revealedAnswerIsNotCountedAsRecalled() {
+        var s = HintSession(answer: found())
+        _ = s.start()
+        #expect(!s.respond(to: "答えを教えて").recalledByThemselves)
+        var t = HintSession(answer: found())
+        _ = t.start()
+        #expect(!t.reveal().recalledByThemselves)
+        #expect(!t.respond(to: "森田さん").recalledByThemselves)  // already revealed
     }
 
     @Test func wrongGuessGivesNextHintThenOffersAnswer() {
@@ -494,5 +506,31 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(first < second)
         #expect(text.contains("話したこと:\n[16:05] にんじんを買う\nまとめ: 買い物の予定。"))
         #expect(RecordExport.fileName(exportedOn: date("2026-11-12"), dayCalendar: tokyo) == "ど忘れ相棒の記録_2026-11-12.txt")
+    }
+}
+
+@Suite struct RecallLogTests {
+    let now = ISO8601DateFormatter().date(from: "2026-11-07T06:00:00Z")!
+
+    @Test func countsOnlyTheLastSevenDays() {
+        var log = RecallLog()
+        log.add(at: now.addingTimeInterval(-3600), hintsUsed: 1)
+        log.add(at: now.addingTimeInterval(-5 * 86400), hintsUsed: 2)
+        log.add(at: now.addingTimeInterval(-10 * 86400), hintsUsed: 1)
+        #expect(log.countInLastWeek(now: now, calendar: tokyo.calendar) == 2)
+    }
+
+    @Test func homeMessageHidesZero() {
+        #expect(RecallLog.homeMessage(weekCount: 0) == nil)
+        #expect(RecallLog.homeMessage(weekCount: 3) == "この1週間で、ご自分で3回思い出せました。")
+    }
+
+    @Test func keepsAtMostMaxEntriesAndSurvivesRoundTrip() {
+        var log = RecallLog()
+        for i in 0..<(RecallLog.maxEntries + 5) { log.add(at: now.addingTimeInterval(Double(i)), hintsUsed: 0) }
+        #expect(log.entries.count == RecallLog.maxEntries)
+        #expect(log.entries.allSatisfy { $0.hintsUsed == 1 })
+        #expect(RecallLog.decoded(from: log.encoded()) == log)
+        #expect(RecallLog.decoded(from: Data("broken".utf8)) == RecallLog())
     }
 }

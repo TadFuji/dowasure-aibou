@@ -6,6 +6,8 @@ public struct HintSession: Sendable, Equatable {
     public struct Reply: Sendable, Equatable {
         public var text: String
         public var revealed: Bool
+        /// True only when the user named the answer from the hints, before asking for it.
+        public var recalledByThemselves: Bool = false
     }
 
     public let answer: VerifiedAnswer
@@ -35,7 +37,8 @@ public struct HintSession: Sendable, Equatable {
         if Self.asksForAnswer(utterance) { return reveal() }
         if Self.isCorrectGuess(utterance, keywords: answer.answerKeywords) {
             revealed = true
-            return Reply(text: "そうです！\n\(answer.displayText)", revealed: true)
+            return Reply(text: "そうです！ご自分で思い出せましたね。\n\(answer.displayText)", revealed: true,
+                         recalledByThemselves: true)
         }
         let prefix = Self.asksForHint(utterance) ? "" : Self.notMatchedPrefix(utterance)
         return Reply(text: prefix + nextHintOrOffer(), revealed: false)

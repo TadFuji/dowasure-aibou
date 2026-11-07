@@ -1,6 +1,6 @@
 # Claude Code の使い方
 
-制作者の藤川はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テスト・記録を Claude Code が担当しました。ここでは、Claude Code のどの機能を、何のために、どう使い分けたかを残します。最終更新：2026-11-03。
+制作者の藤川はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テスト・記録を Claude Code が担当しました。ここでは、Claude Code のどの機能を、何のために、どう使い分けたかを残します。最終更新：2026-11-07。
 
 **書いてあるのは実際に使ったものだけです。** これから使う予定のものは、そう書いています。
 
@@ -46,6 +46,21 @@ flowchart LR
 | **プロジェクトのスキル「開発記録」** | [`.claude/skills/dev-log/`](../.claude/skills/dev-log/SKILL.md) | `docs/開発記録.md` への追記の形（問題 → 原因 → 対応 → 結果、藤川の言葉はそのまま）を決める。どのスレッドでも同じ形で書く |
 | **プロジェクトのスキル「公開前の点検」** | [`.claude/skills/pre-publish-check/`](../.claude/skills/pre-publish-check/SKILL.md) | 提出前にリポジトリを公開へ戻す時の点検手順 |
 | **GitHub Actions「点検」** | [`.github/workflows/secret-scan.yml`](../.github/workflows/secret-scan.yml) | プッシュのたびに、鍵らしい文字列と文書のリンク切れを GitHub 側で点検する。pre-commit を有効にし忘れた時の二重の守り |
+
+## 2026-11-07 に加えたもの
+
+| 機能 | 場所 | 何をするか |
+|---|---|---|
+| **サブエージェント「高齢の利用者役」** | [`.claude/agents/elder-user-reviewer.md`](../.claude/agents/elder-user-reviewer.md) | 70代でスマホに不慣れな利用者になりきり、迷う所・読めない所・怖い言葉を指摘する |
+| **サブエージェント「ヒント漏れの審査員」** | [`.claude/agents/hint-leak-judge.md`](../.claude/agents/hint-leak-judge.md) | ヒントが答えを漏らしていないか、順序とやさしさを、作った本人と別の目で判定する。コードの文字一致では見つからない言い換えの漏れを探す |
+| **サブエージェント「iOS 技術者」** | [`.claude/agents/ios-reviewer.md`](../.claude/agents/ios-reviewer.md) | 落ちる・固まる・音が鳴り続ける不具合を探す |
+| **サブエージェント「大会の審査員」** | [`.claude/agents/hackathon-judge.md`](../.claude/agents/hackathon-judge.md) | 配点どおりに採点し、点が伸びる直しを出す |
+| **フック：書き込み前の鍵止め** | [`.claude/hooks/guard_secrets.py`](../.claude/hooks/guard_secrets.py) | git の pre-commit より一歩手前、ファイルに書く前に鍵と `secrets/` を止める |
+| **フック：公開の確認** | [`.claude/hooks/guard_publish.py`](../.claude/hooks/guard_publish.py) | リポジトリの公開切り替えと強制 push は、必ず確認を出す（取り消せない操作のため） |
+| **フック：医療めいた言葉** | [`.claude/hooks/check_wording.py`](../.claude/hooks/check_wording.py) | アプリの文に「脳トレ」「認知機能」などが入ったら知らせる（大会の失格例のため） |
+| **フック：終える前の確認** | [`.claude/hooks/finish_check.py`](../.claude/hooks/finish_check.py) | 中核を変えていれば自動でテスト。開発記録への追記漏れも知らせる |
+
+11/07 午前のレビューでは、3つの立場のサブエージェントを、その場の指示で同時に動かした。よく効いたので、同じ立場を係としてリポジトリに固定し、どのスレッドからでも同じ目で見られるようにした。
 
 ## Claude API（アプリの中の AI）の使い方
 

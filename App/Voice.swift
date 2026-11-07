@@ -402,6 +402,50 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         toneOn = true
     }
 
+    /// "そうです！" moment: a soft rising two-note chime (G4 → C5, below 1 kHz) and a success vibration,
+    /// then the words. The short wait keeps the chime from being covered by the voice.
+    func celebrateThenSay(_ text: String) {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        prepareEngine()
+        if let chime = Self.chimePattern(format: pcmFormat) {
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+            try? AVAudioSession.sharedInstance().setActive(true)
+            if (try? engine.start()) != nil {
+                toneNode.scheduleBuffer(chime, at: nil, options: .interrupts, completionHandler: nil)
+                toneNode.play()
+            }
+        }
+        let mine = generation
+        Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            // Left the screen or something else started speaking meanwhile: stay quiet.
+            guard mine == generation else { return }
+            await sayAndWait(text)
+        }
+    }
+
+    /// Two gentle bell-like notes, pure tones only so nothing reaches 1 kHz.
+    nonisolated static func chimePattern(format: AVAudioFormat) -> AVAudioPCMBuffer? {
+        let rate = format.sampleRate
+        let notes: [(start: Double, frequency: Double)] = [(0, 392.0), (0.22, 523.25)]
+        let noteLength = 0.7
+        let total = Int(rate * (0.22 + noteLength))
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(total)),
+              let out = buffer.floatChannelData?[0] else { return nil }
+        buffer.frameLength = AVAudioFrameCount(total)
+        for i in 0..<total { out[i] = 0 }
+        let attackFrames = Int(rate * 0.015)
+        for note in notes {
+            let start = Int(rate * note.start)
+            for i in 0..<Int(rate * noteLength) where start + i < total {
+                let t = Double(i) / rate
+                let attack = i < attackFrames ? Double(i) / Double(attackFrames) : 1
+                out[start + i] += Float(0.12 * attack * exp(-t * 5) * sin(2 * .pi * note.frequency * t))
+            }
+        }
+        return buffer
+    }
+
     func stopWaitingTone() {
         guard toneOn else { return }
         toneNode.stop()

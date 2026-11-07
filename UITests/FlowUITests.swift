@@ -109,8 +109,17 @@ final class FlowUITests: XCTestCase {
         XCTAssertTrue(reply.waitForExistence(timeout: 60))
         XCTAssertTrue(reply.label.hasPrefix("ヒントです"), reply.label)
         XCTAssertFalse(reply.label.contains("青山"), reply.label)
-        app.buttons["revealButton"].tap()
-        XCTAssertTrue(reply.label.contains("の記録より："), reply.label)
+        // On this screen size the hint buttons can sit under the floating "ホームにもどる" bar.
+        // XCTest then tapped without scrolling and the tap missed (two of five runs on 11/07).
+        // Scroll to the end first, so the button is fully above the bar.
+        let revealButton = app.buttons["revealButton"]
+        XCTAssertTrue(revealButton.waitForExistence(timeout: 5))
+        _ = app.keyboards.firstMatch.waitForNonExistence(timeout: 5)
+        app.scrollViews.firstMatch.swipeUp()
+        revealButton.tap()
+        // The text changes a moment after the tap; wait for it instead of reading the old hint.
+        let revealed = expectation(for: NSPredicate(format: "label CONTAINS %@", "の記録より："), evaluatedWith: reply)
+        wait(for: [revealed], timeout: 5)
         XCTAssertTrue(reply.label.contains("青山"), reply.label)
     }
 
@@ -173,5 +182,9 @@ final class FlowUITests: XCTestCase {
         app.buttons["sendGuess"].tap()
         XCTAssertTrue(answer.label.hasPrefix("そうです！"), answer.label)
         XCTAssertTrue(answer.label.contains("の記録より："), answer.label)
+        // Back home, the time they recalled it themselves is shown as encouragement.
+        app.buttons["homeButton"].tap()
+        let recall = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "ご自分で1回思い出せました")).firstMatch
+        XCTAssertTrue(recall.waitForExistence(timeout: 5))
     }
 }

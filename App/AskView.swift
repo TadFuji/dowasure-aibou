@@ -176,6 +176,16 @@ struct AskView: View {
         guard var s = session else { return }
         let reply = s.respond(to: words)
         session = s
+        if reply.recalledByThemselves {
+            // Named it from the hints: count it for the home screen, and celebrate with sound and vibration.
+            // The microphone does not open again: the question is over.
+            hintTask?.cancel()
+            voice.cancel()
+            RecallStore.add(hintsUsed: s.hintsGiven)
+            replyText = reply.text
+            Speaker.shared.celebrateThenSay(reply.text)
+            return
+        }
         speak(reply)
     }
 
