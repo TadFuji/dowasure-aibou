@@ -123,7 +123,7 @@ struct ElderScreen: ViewModifier {
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
             Button {
-                Speaker.shared.stop()
+                Speaker.shared.stopEverything()
                 dismiss()
             } label: {
                 Label("ホームにもどる", systemImage: "house.fill")

@@ -13,6 +13,8 @@ struct AskView: View {
     @State private var replyText: String?
     @State private var errorMessage: String?
     @State private var voice = VoiceInput()
+    /// The running question, cancelled when the user leaves the screen.
+    @State private var askTask: Task<Void, Never>?
 
     private var revealed: Bool { session?.revealed ?? false }
 
@@ -41,7 +43,12 @@ struct AskView: View {
             .padding(24)
         }
         .elderScreen("あれ、何だっけ？")
-        .onDisappear { voice.stop() }
+        .onDisappear {
+            askTask?.cancel()
+            askTask = nil
+            voice.stop()
+            Speaker.shared.stopEverything()
+        }
     }
 
     /// Before a question (or after the answer): ask something new.
@@ -50,7 +57,7 @@ struct AskView: View {
             .font(.title.bold())
         MicButton(voice: voice) { spoken in
             question = spoken
-            Task { await ask() }
+            startAsking()
         }
         TextField("文字で聞く（例：先週会った眼鏡の人の名前）", text: $question, axis: .vertical)
             .font(.title2)
@@ -58,7 +65,7 @@ struct AskView: View {
             .textFieldStyle(.roundedBorder)
             .accessibilityIdentifier("askInput")
         BigButton(title: isWorking ? "探しています…" : "聞いてみる", systemImage: "magnifyingglass", color: Palette.orange) {
-            Task { await ask() }
+            startAsking()
         }
         .disabled(isWorking || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         .accessibilityIdentifier("askSubmit")
@@ -121,6 +128,12 @@ struct AskView: View {
         Speaker.shared.say(text)
     }
 
+    /// Starts one question at a time (a spoken and a typed question must not run together).
+    private func startAsking() {
+        guard !isWorking else { return }
+        askTask = Task { await ask() }
+    }
+
     private func ask() async {
         isWorking = true
         errorMessage = nil
@@ -131,6 +144,8 @@ struct AskView: View {
             Speaker.shared.startWaitingTone()
             let answerer = Answerer(client: ClaudeClient(apiKey: APIKeyStore.load()))
             let answer = try await answerer.answer(question, records: RecordStore.allRecords(context))
+            // The user went back home while waiting: do not speak the hint over the home screen.
+            guard !Task.isCancelled else { return }
             var s = HintSession(answer: answer)
             let first = s.start()
             session = s
@@ -138,6 +153,7 @@ struct AskView: View {
             say(first.text)
         } catch {
             Speaker.shared.stopWaitingTone()
+            guard !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
         }
     }

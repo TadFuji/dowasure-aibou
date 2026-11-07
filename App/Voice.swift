@@ -532,6 +532,12 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         }
     }
 
+    /// Stops speech and the waiting tone. Used when leaving a screen, so nothing keeps sounding at home.
+    func stopEverything() {
+        stop()
+        stopWaitingTone()
+    }
+
     func stop() {
         generation += 1
         synthesizer.stopSpeaking(at: .immediate)

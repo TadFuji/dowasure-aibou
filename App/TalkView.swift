@@ -93,7 +93,7 @@ struct TalkView: View {
         }
         .onDisappear {
             voice.stop()
-            Speaker.shared.stop()
+            Speaker.shared.stopEverything()
         }
     }
 
