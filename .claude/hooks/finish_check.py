@@ -15,7 +15,10 @@ import sys
 
 
 def changed_files(root):
-    out = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True)
+    # quotePath=false keeps 開発記録.md readable (git otherwise prints it as octal escapes);
+    # untracked-files=all lists new files instead of only their folder.
+    out = subprocess.run(["git", "-c", "core.quotePath=false", "status", "--porcelain",
+                          "--untracked-files=all"], cwd=root, capture_output=True, text=True)
     return [line[3:].strip('"') for line in out.stdout.splitlines() if len(line) > 3]
 
 
