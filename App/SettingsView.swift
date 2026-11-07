@@ -47,6 +47,8 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        // The reader lets the list move to "保存しました。" after saving (it was left under the bottom area).
+        ScrollViewReader { proxy in
         Form {
             // The settings start from the middle of the screen, within reach of the right thumb
             // (藤川さん, 2026-11-07). Above them, only a short note to read.
@@ -144,12 +146,18 @@ struct SettingsView: View {
                         apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
                         keyMessage = APIKeyStore.save(apiKey) ? "保存しました。" : "保存できませんでした。"
                         if keyMessage == "保存しました。" { Task { await checkKey() } }
+                        // Once the keyboard has gone down, bring the result to the middle of the list.
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(500))
+                            withAnimation { proxy.scrollTo("keyResult", anchor: .center) }
+                        }
                     }
                     .accessibilityIdentifier("saveKeyButton")
                     if let keyMessage {
                         Label(keyMessage, systemImage: keyMessage == "保存しました。" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(keyMessage == "保存しました。" ? Palette.green : Palette.red)
                             .accessibilityIdentifier("keyMessage")
+                            .id("keyResult")
                     }
                     if let keyCheckMessage {
                         if keyCheckOK {
@@ -201,6 +209,7 @@ struct SettingsView: View {
                 .onAppear { exportRecords = RecordStore.allRecords(context) }
                 .accessibilityIdentifier("keepingGroup")
             }
+        }
         }
         .font(.title3)
         .contentMargins(.top, formHeight * 0.3, for: .scrollContent)
