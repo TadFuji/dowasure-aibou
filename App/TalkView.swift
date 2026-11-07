@@ -16,6 +16,8 @@ struct TalkView: View {
     @State private var note: String?
     @State private var voice = VoiceInput()
     @State private var started = false
+    /// From opening the screen until the microphone starts (the prompt is being said).
+    @State private var waitingToListen = false
     /// Transcript before the last item, so a mistaken item can be taken back.
     @State private var undoTranscript: String?
 
@@ -32,7 +34,7 @@ struct TalkView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("aiQuestion")
 
-                MicStatus(voice: voice)
+                MicStatus(voice: voice, waiting: waitingToListen)
                 if let errorMessage {
                     WarningText(text: errorMessage)
                 }
@@ -84,7 +86,8 @@ struct TalkView: View {
                 }
             }
             if voiceEnabled {
-                MicButton(voice: voice, idleTitle: lastConfirmation == nil ? "声で話す" : "ほかにも話す") { spoken in
+                MicButton(voice: voice, idleTitle: lastConfirmation == nil ? "声で話す" : "ほかにも話す",
+                          waitingToListen: waitingToListen, onCancelWaiting: cancelWaiting) { spoken in
                     Task { await remember(spoken) }
                 }
             }
@@ -116,16 +119,29 @@ struct TalkView: View {
             started = true
             loadToday()
             if voiceEnabled {
+                waitingToListen = true
                 await Speaker.shared.sayAndWait(Self.prompt)
-                // Left the screen during the prompt, or already listening from the button: do nothing.
-                guard !Task.isCancelled, !voice.isListening else { return }
+                // Left the screen during the prompt, or "話し終わった" was pressed: do nothing.
+                guard !Task.isCancelled, waitingToListen, !voice.isListening else {
+                    waitingToListen = false
+                    return
+                }
                 await voice.start { spoken in Task { await remember(spoken) } }
+                waitingToListen = false
             }
         }
         .onDisappear {
+            waitingToListen = false
             voice.stop()
             Speaker.shared.stopEverything()
         }
+    }
+
+    /// "話し終わった" before the microphone started: stop the prompt and do not listen.
+    private func cancelWaiting() {
+        waitingToListen = false
+        Speaker.shared.stop()
+        voice.cancel()
     }
 
     /// "[16:05] にんじんを買う" → "16時05分、にんじんを買う" for VoiceOver.
@@ -164,6 +180,8 @@ struct TalkView: View {
     private func remember(_ text: String) async {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { return }
+        // Typed during the opening words: do not open the microphone over the confirmation.
+        waitingToListen = false
         voice.stop()
         errorMessage = nil
         note = nil

@@ -174,6 +174,9 @@ struct ElderScreen<Actions: View>: ViewModifier {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
                 .padding(.top, 8)
+            VolumeWarning()
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .frame(minHeight: Style.readingMinHeight)

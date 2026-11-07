@@ -22,6 +22,8 @@ struct AskView: View {
     /// Set after "not found, when was it?": the next short reply is searched together with it.
     @State private var pendingQuestion: String?
     @State private var started = false
+    /// From opening the screen until the microphone starts (the prompt is being said).
+    @State private var waitingToListen = false
     /// Changes with every new question; an older question that is still speaking must not
     /// start the microphone or clear the "searching" state of the newer one.
     @State private var askGeneration = 0
@@ -64,7 +66,7 @@ struct AskView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                MicStatus(voice: voice)
+                MicStatus(voice: voice, waiting: waitingToListen)
                 if let errorMessage {
                     WarningText(text: errorMessage)
                 }
@@ -83,9 +85,15 @@ struct AskView: View {
             guard !started else { return }
             started = true
             guard voiceEnabled else { return }
+            waitingToListen = true
             await Speaker.shared.sayAndWait(Self.prompt)
-            guard !Task.isCancelled, !voice.isListening, !isWorking, session == nil else { return }
+            // "話し終わった" pressed, a typed question started, or the screen was left: do not listen.
+            guard !Task.isCancelled, waitingToListen, !voice.isListening, !isWorking, session == nil else {
+                waitingToListen = false
+                return
+            }
             await voice.start(onFinish: heardQuestion)
+            waitingToListen = false
         }
         .onDisappear {
             askTask?.cancel()
@@ -116,7 +124,8 @@ struct AskView: View {
                 Speaker.shared.say(replyText)
             }
         }
-        MicButton(voice: voice, idleTitle: "声でたずねる", onText: heardQuestion)
+        MicButton(voice: voice, idleTitle: "声でたずねる", waitingToListen: waitingToListen,
+                  onCancelWaiting: cancelWaiting, onText: heardQuestion)
         TextField("文字で聞く（例：先週会った眼鏡の人の名前）", text: $question, axis: .vertical)
             .font(.title2)
             .lineLimit(1...3)
@@ -249,6 +258,13 @@ struct AskView: View {
         }
     }
 
+    /// "話し終わった" before the microphone started: stop the prompt and do not listen.
+    private func cancelWaiting() {
+        waitingToListen = false
+        Speaker.shared.stop()
+        voice.cancel()
+    }
+
     private func repeatHint(_ text: String) {
         speak(HintSession.Reply(text: text, revealed: session?.revealed ?? true))
     }
@@ -261,6 +277,7 @@ struct AskView: View {
     /// Starts one question at a time (a spoken and a typed question must not run together).
     private func startAsking() {
         guard !isWorking else { return }
+        waitingToListen = false
         // The previous question may still be speaking "見当たりません…" (isWorking is already false then).
         askTask?.cancel()
         hintTask?.cancel()
