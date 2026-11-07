@@ -741,8 +741,19 @@ struct MicButton: View {
 /// while the microphone button itself sits at the bottom within reach of the thumb.
 struct MicStatus: View {
     let voice: VoiceInput
+    /// The opening words are still being said; the microphone starts right after them.
+    var waiting = false
 
     var body: some View {
+        if waiting && !voice.isListening {
+            // Without this, the user did not know when to start (2026-11-07, 藤川さん：「お話しください」と出て、
+            // iPhoneが一瞬ブルっとするのは、3秒後ぐらい).
+            Label("声が終わって、ブルっとしたら、お話しください", systemImage: "hourglass")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("micWaiting")
+        }
         if voice.isListening {
             Label(voice.text.isEmpty ? "どうぞ、お話しください…" : voice.text, systemImage: "mic.fill")
                 .font(.title2)

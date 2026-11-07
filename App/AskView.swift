@@ -66,7 +66,7 @@ struct AskView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                MicStatus(voice: voice)
+                MicStatus(voice: voice, waiting: waitingToListen)
                 if let errorMessage {
                     WarningText(text: errorMessage)
                 }

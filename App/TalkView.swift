@@ -34,7 +34,7 @@ struct TalkView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("aiQuestion")
 
-                MicStatus(voice: voice)
+                MicStatus(voice: voice, waiting: waitingToListen)
                 if let errorMessage {
                     WarningText(text: errorMessage)
                 }
