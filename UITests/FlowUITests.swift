@@ -173,5 +173,9 @@ final class FlowUITests: XCTestCase {
         app.buttons["sendGuess"].tap()
         XCTAssertTrue(answer.label.hasPrefix("そうです！"), answer.label)
         XCTAssertTrue(answer.label.contains("の記録より："), answer.label)
+        // Back home, the time they recalled it themselves is shown as encouragement.
+        app.buttons["homeButton"].tap()
+        let recall = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "ご自分で1回思い出せました")).firstMatch
+        XCTAssertTrue(recall.waitForExistence(timeout: 5))
     }
 }

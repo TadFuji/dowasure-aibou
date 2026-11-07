@@ -17,6 +17,9 @@ struct DowasureApp: App {
             try? container.mainContext.delete(model: StoredDay.self)
             try? container.mainContext.save()
         }
+        if args.contains("-uitest-reset") || args.contains("-uitest-reset-records") {
+            RecallStore.reset()
+        }
         if args.contains("-uitest-reset") {
             APIKeyStore.save("")
         }

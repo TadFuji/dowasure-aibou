@@ -8,6 +8,8 @@ struct HomeView: View {
     @State private var path: [Route] = []
     /// Without the Claude key the app can save words but not give hints, so first-time setup is shown here.
     @State private var needsSetup = APIKeyStore.load().isEmpty
+    /// "この1週間で、ご自分で3回思い出せました。" Shown only after the first time; never a "0".
+    @State private var recallMessage = RecallStore.homeMessage()
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -16,6 +18,20 @@ struct HomeView: View {
             VStack(spacing: 28) {
                 if needsSetup {
                     setupNotice
+                }
+                if let recallMessage {
+                    Label {
+                        Text(recallMessage)
+                    } icon: {
+                        Image(systemName: "star.fill").foregroundStyle(Palette.green)
+                    }
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(Palette.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("recallMessage")
                 }
                 BigButton(title: "あれ、何だっけ？", systemImage: "questionmark.bubble", color: Palette.orange) {
                     path.append(.ask)
@@ -47,10 +63,16 @@ struct HomeView: View {
             .padding(.top, 40)
             }
             .navigationTitle("ど忘れ相棒")
-            .onAppear { needsSetup = APIKeyStore.load().isEmpty }
+            .onAppear {
+                needsSetup = APIKeyStore.load().isEmpty
+                recallMessage = RecallStore.homeMessage()
+            }
             .onChange(of: path) { _, newPath in
                 // Back on the home screen (e.g. after saving the key in settings): check again.
-                if newPath.isEmpty { needsSetup = APIKeyStore.load().isEmpty }
+                if newPath.isEmpty {
+                    needsSetup = APIKeyStore.load().isEmpty
+                    recallMessage = RecallStore.homeMessage()
+                }
             }
             .navigationDestination(for: Route.self) { route in
                 switch route {
