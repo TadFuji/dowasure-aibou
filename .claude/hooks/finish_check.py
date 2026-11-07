@@ -15,11 +15,19 @@ import sys
 
 
 def changed_files(root):
-    # quotePath=false keeps 開発記録.md readable (git otherwise prints it as octal escapes);
-    # untracked-files=all lists new files instead of only their folder.
-    out = subprocess.run(["git", "-c", "core.quotePath=false", "status", "--porcelain",
-                          "--untracked-files=all"], cwd=root, capture_output=True, text=True)
-    return [line[3:].strip('"') for line in out.stdout.splitlines() if len(line) > 3]
+    # -z: NUL-separated and unquoted, so Japanese names like docs/開発記録.md come out as they are
+    # (the default output quotes them with octal escapes).
+    out = subprocess.run(["git", "status", "--porcelain", "-z", "--untracked-files=all"],
+                         cwd=root, capture_output=True, text=True)
+    files = []
+    entries = iter(out.stdout.split("\0"))
+    for entry in entries:
+        if len(entry) < 4:
+            continue
+        files.append(entry[3:])
+        if entry[0] in "RC":
+            next(entries, None)  # a rename's second entry is the old name
+    return files
 
 
 def main():
