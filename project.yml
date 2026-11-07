@@ -30,6 +30,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_NSMicrophoneUsageDescription: あなたの声を文字にするために、マイクを使います。
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: あなたの声を文字にします。できるだけiPhoneの中で処理します。
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
   DowasureAibouUITests:
     type: bundle.ui-testing
