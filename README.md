@@ -20,11 +20,11 @@
 **誰のためか**：スマホに慣れていない高齢の方。「さっき聞いた名前」「来週の約束」が、ふっと出てこない時のために。
 **どう作ったか**：Built with Claude: Japan 2026 の応募作品です。2026-11-02 から期間中に新しく作りました（11/02 の最初の版は、11/03 の最初のコミットにまとめて入っています）。制作者の藤川（65歳）はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テストを Claude Code が担当しました。
 
-<!--
-【11/08 差し込み枠：デモ動画】YouTube の限定公開 URL ができたら、この注釈を消して次の2行を生かす。
-## デモ動画（3分）
-[![ど忘れ相棒 デモ動画](https://img.youtube.com/vi/動画ID/hqdefault.jpg)](https://www.youtube.com/watch?v=動画ID)
--->
+## デモ動画（3分以内）
+
+[![ど忘れ相棒 デモ動画](https://img.youtube.com/vi/m0t_-hheois/hqdefault.jpg)](https://youtu.be/m0t_-hheois)
+
+藤川が自分の iPhone で、実際に使っている様子です。記録は架空のものです。
 
 <!--
 【11/08 差し込み枠：画面写真】UITests/ScreenshotTests.swift で撮った screenshots-out/ から選び、docs/images/ に入れてから、この注釈を消して次の表を生かす。写真は架空の記録だけ。
@@ -63,11 +63,11 @@
 | 答えのある質問に正しく答えた | **22 / 22** | 本物の Claude Haiku 5.5 で採点（2026-11-07 夜、今のコード 5c5110c） |
 | 記録に無い質問に「見当たりません」と答えた | **8 / 8** | 同上 |
 | ヒントに答えの言葉が入った（コードの点検） | **0 / 22** | 同上 |
-| ヒントの係が読んで「漏れに近い」と判定 | 3 / 22 | 短い答え（野球・白・3勝）の最初の音。どこまで許すかは藤川が判断中（[係の点検](docs/係の点検.md)） |
+| ヒントの係が読んで「漏れに近い」と判定 | 3 / 22 | 短い答え（野球・白・3勝）の最初の音。藤川が「今のまま最初の音を言う」と決めた（11/07 23:13）（[係の点検](docs/係の点検.md)） |
 | 答えが出るまでの待ち時間 | 平均 4.4秒、最長 8.6秒 | 同上 |
 | 中核の単体テスト | **60件**（Mac で全件成功） | `DowasureCore/Tests`、2026-11-07 夜（5c5110c） |
 | 画面の通しテスト | **6本**（本物の Claude を使う2本を含む。全件成功） | `UITests/`、2026-11-07 夜（5c5110c）。ほかに README の画面写真を撮るだけのテストが1本（ふだんは飛ばす） |
-| 声の中継所のテスト | 6件（成功） | `relay/speak.test.js` |
+| 声の中継所のテスト | 8件（成功、11/08） | `relay/speak.test.js` |
 
 採点の問題は架空の30問で、制作側が作ったものです。良く出すぎている恐れもあります（[限界](docs/採点.md#限界正直に)）。
 
@@ -98,7 +98,7 @@
 | 係 | どんな人か | 見つけた主なこと | 直したこと |
 |---|---|---|---|
 | **高齢の利用者役** [`elder-user-reviewer`](.claude/agents/elder-user-reviewer.md) | 70代。iPhone は電話と LINE くらい。老眼で、カタカナ語が分からない | 濃い色の「答えを教えて」が一番目立ち、うっかり押しそう。「APIキー」という言葉が分からない | 「もう少しヒント」を濃い色に。利用者に見せる文から「APIキー」をなくした |
-| **ヒントの審査員** [`hint-leak-judge`](.claude/agents/hint-leak-judge.md) | 答えを漏らしたヒントを、一番の失敗と考える人 | 「◯月の明日」「山や空のことが分かる本」など、**自動の判定（毎回0問）では見つからない漏れを計5問** | ヒントの決まりを足し、裏目に出たものは外した。短い答えの最初の音をどこまで許すかは、藤川の判断に |
+| **ヒントの審査員** [`hint-leak-judge`](.claude/agents/hint-leak-judge.md) | 答えを漏らしたヒントを、一番の失敗と考える人 | 「◯月の明日」「山や空のことが分かる本」など、**自動の判定（毎回0問）では見つからない漏れを計5問** | ヒントの決まりを足し、裏目に出たものは外した。短い答えの最初の音は、藤川が「今のまま最初の音を言う」と決めた（11/07 23:13）。 |
 | **iOS の技術者** [`ios-reviewer`](.claude/agents/ios-reviewer.md) | 音声・マイク・保存に詳しい技術者 | 読み上げを途中で止めると待ち音が鳴り続ける。電話中にマイクを始めると落ちることがある。設定に「外に送るもの」が書かれていない | 待ち音とマイクの後始末、落ちないための確認、設定に「外に送るもの」を書いた |
 | **大会の審査員** [`hackathon-judge`](.claude/agents/hackathon-judge.md) | 公式の配点どおりに、ほかの作品と並べて厳しく見る人 | 一番の弱点はデモ（動画と画面写真が無い） | 11/08 の撮影で入れる |
 
@@ -141,7 +141,7 @@
 続けて使ってもらうための工夫：
 
 - **毎晩のお知らせ**：決めた時刻（最初は20時）に「忘れたくないことはありますか？」。押すと話す画面が開きます。
-- **Siri で一言**：「ど忘れ相棒で覚えて」「ど忘れ相棒で何だっけ」。アプリを探さずに始められます。
+- **ショートカットから開く**：「ど忘れ相棒で覚えて」などの言い方を、iPhone のショートカットに登録しています。ただし、藤川の iPhone では声の Siri がアプリの名前を聞き取れず、Siri の一言では開けませんでした（2026-11-08）。
 - **励ましだけを見せる**：ヒントだけで言い当てると、ホームに「この1週間で、ご自分で◯回思い出せました。」。0回の時は何も出しません（採点されている感じを避けるため）。
 
 ## 使い方の流れ
@@ -179,12 +179,14 @@ AI への問い合わせは最初の1回だけです。2つ目のヒントや答
 | **覚えておくことを話す** | 時間帯に関係なく、何度でも話して記録。話した言葉をそのまま読み返すので、聞き間違いに気づけます。「いまのを取り消す」で直前の1件を消せます |
 | **あれ、何だっけ？** | 声か文字で聞くと、まずヒント。名前を言えば「そうです！」、違えば聞こえた言葉を伝えて次のヒント。「答えを教えて」で、根拠の日付つきの答え。記録に無いことは「見当たりません」と答え、いつ頃かを聞き返します |
 | **自分で思い出せた記録** | 言い当てた時は、低い2音のチャイムと振動。答えを聞いた回は数えません |
-| **Siri で一言** | 7つの言い方を登録（[`SiriShortcuts.swift`](App/SiriShortcuts.swift)）。同じものを横のボタン（アクションボタン）にも割り当てられます |
+| **ショートカットに登録** | 7つの言い方を登録（[`SiriShortcuts.swift`](App/SiriShortcuts.swift)）。同じものを横のボタン（アクションボタン）にも割り当てられます。声の Siri は、藤川の iPhone ではアプリの名前を聞き取れず開けませんでした（2026-11-08） |
 | **毎晩のお知らせ** | 時刻は設定で変えられます |
 | **自然な声** | Gemini の声で、低め・ゆっくり・はっきり。使えない時は自動で iPhone の声に。音量が0でも、声を待たせずに文字と振動で進みます |
 | **記録の保管（ご家族向け）** | 記録をテキストで書き出す。すべて消す時は確認つき |
 
 ## ヒントを出すしくみ
+
+探して答えを返すだけの仕組み（よくある RAG）ではありません。中心は、答えを伏せたままヒントを段階的に出し、ヒントが答えを漏らしていないかをコードで確かめることです。
 
 AI に任せるのは「言葉づくり」だけです。答えを漏らさないこと、根拠の日付、ヒントから答えへの進め方は、アプリのコードが決めます。
 
@@ -205,7 +207,7 @@ AI に任せるのは「言葉づくり」だけです。答えを漏らさな�
 | 2 | 数のヒントが「4けたの数字です」だけで弱い | 桁数と最初の数字の両方を言う |
 | 3 | 答えが1けたの時、「最初の数字は『はち』」が答えそのもの | 1けたの時は最初の数字を言わない |
 | 4 | 正答 22/22、作り話 0。ここまでの点検では漏れは見つからず | — |
-| 5〜7（係の点検） | ヒントの係が1つずつ読むと、自動では0件でも漏れや言い直しがあった（計5問）。最後は短い答えの最初の音が漏れに近い（3/22） | 2つ目は記録の新しい手がかりを入れる、など。短い答えの扱いは藤川が判断中（[係の点検](docs/係の点検.md)） |
+| 5〜7（係の点検） | ヒントの係が1つずつ読むと、自動では0件でも漏れや言い直しがあった（計5問）。最後は短い答えの最初の音が漏れに近い（3/22） | 2つ目は記録の新しい手がかりを入れる、など。短い答えの扱いは、藤川が「今のまま最初の音を言う」と決めた（11/07 23:13）（[係の点検](docs/係の点検.md)） |
 
 ## 記録の保存（1〜2年使う前提）
 
@@ -289,7 +291,7 @@ flowchart LR
 | **説明書** | [`CLAUDE.md`](CLAUDE.md) | 目的（藤川の言葉）、守ること（音は1kHz未満、ボタンは下半分、医療の言葉は使わない…）、既知の問題。どのセッションも同じ決まりで作る |
 | **スキル** | [`dev-log`](.claude/skills/dev-log/SKILL.md) | 開発記録の書き方（問題 → 原因 → 対応 → 結果、藤川の言葉は原文） |
 | | [`pre-publish-check`](.claude/skills/pre-publish-check/SKILL.md) | 公開へ戻す前の点検手順（鍵・本物の記録・実名） |
-| **サブエージェント**（読むだけの道具に限定） | [`elder-user-reviewer`](.claude/agents/elder-user-reviewer.md) | 70代でスマホに不慣れな利用者になりきり、迷う所・読めない所・怖い言葉を指摘 |
+| **サブエージェント**（コードは書き換えず、指摘だけを返す。ヒントの係と iOS の係は、試しの実行に Bash も使う） | [`elder-user-reviewer`](.claude/agents/elder-user-reviewer.md) | 70代でスマホに不慣れな利用者になりきり、迷う所・読めない所・怖い言葉を指摘 |
 | | [`hint-leak-judge`](.claude/agents/hint-leak-judge.md) | ヒントが答えを漏らしていないかを判定。コードの文字一致では見つからない言い換えを探す |
 | | [`ios-reviewer`](.claude/agents/ios-reviewer.md) | 落ちる・固まる・音が鳴り続ける不具合を探す |
 | | [`hackathon-judge`](.claude/agents/hackathon-judge.md) | 大会の配点どおりに採点し、直し方を出す |
@@ -316,7 +318,9 @@ flowchart LR
 
 ## 動かし方とテスト
 
-必要なもの：Xcode 26 以降の Mac、[XcodeGen](https://github.com/yonaskolb/XcodeGen)、iOS 26 以降の iPhone（声の確認は実機で行います）。
+必要なもの：Xcode 26 以降の Mac、[XcodeGen](https://github.com/yonaskolb/XcodeGen)、iOS 26 以降の iPhone（声の確認は実機で行います）。中継所のテストだけは Node 20 以降も要ります。
+
+自分の iPhone で動かす時は、Xcode の「Signing & Capabilities」で自分のチームを選び、Bundle Identifier（`io.github.tadfuji.dowasure`）を自分用の名前に変えてください。シミュレーターなら、このままで動きます。
 
 ```bash
 git clone https://github.com/TadFuji/dowasure-aibou.git
@@ -339,7 +343,7 @@ open DowasureAibou.xcodeproj
 | 採点（検索だけ） | `cd DowasureCore && swift run DowasureEval` | 通信なし。正しい日が候補に入った 22/22、1位で当たった 21/22 |
 | 採点（本物の AI） | `cd DowasureCore && swift run DowasureEval --live` | 鍵を `secrets/anthropic_api_key` に置いた時だけ。`--effort` で考える量を切り替え |
 | 画面の通しテスト（6本） | `xcodebuild test -project DowasureAibou.xcodeproj -scheme DowasureAibou -destination 'platform=iOS Simulator,id=<機種のid>'` | 記録と取り消し、鍵の保存、お知らせ、ヒントから答え、本物の Claude での答え |
-| 中継所のテスト（6件） | `cd relay && node --test` | 決まった頼みだけ通す、鍵が無い時は Google を呼ばない、回数の上限 |
+| 中継所のテスト（8件） | `cd relay && node --test` | 決まった頼みだけ通す、鍵が無い時は Google を呼ばない、回数の上限 |
 
 採点の作り方と限界は [docs/採点.md](docs/採点.md)。
 
@@ -348,7 +352,7 @@ open DowasureAibou.xcodeproj
 やっていないことは、やったと書きません。
 
 - 藤川の実際の記録での採点（採点データは架空の30問で、合わせ込みの恐れがある）。
-- 実機での確認：Siri の言い方、毎晩のお知らせ（シミュレーターでは通知の許可が出ない）、着信で音が止まるか。
+- 実機での確認：毎晩のお知らせ（シミュレーターでは通知の許可が出ない）、着信で音が止まるか。
 - 藤川以外の高齢の方による試用と、VoiceOver での通しの操作。
 
 ## フォルダと文書
@@ -380,7 +384,7 @@ open DowasureAibou.xcodeproj
 | [docs/ユニバーサルデザイン.md](docs/ユニバーサルデザイン.md) | 高齢の方に向けた決まりと、その理由 |
 | [docs/採点.md](docs/採点.md) | 採点データの作り方と結果、その限界 |
 | [docs/Claude活用.md](docs/Claude活用.md) | Claude Code の機能をどう使い分けたか |
-| [docs/提出フォーム回答.md](docs/提出フォーム回答.md) | 大会の提出フォーム（11項目）に書いた回答と、選んだ理由 |
+| [docs/提出フォーム回答.md](docs/提出フォーム回答.md) | 大会の提出フォーム（11項目）に書いた回答と、選んだ理由。提出までの作業用の下書きなので、確かめるための📍や「提出前に残ること」の表も残しています |
 | [docs/係の点検.md](docs/係の点検.md) | 4人の係（サブエージェント）に点検させた記録。指摘、直したこと、直さなかった理由 |
 | [SECURITY.md](SECURITY.md) | 問題を見つけた時の連絡先 |
 
@@ -400,4 +404,4 @@ open DowasureAibou.xcodeproj
 
 **Senior-friendly throughout.** Buttons only in the lower half (thumb reach), low-pitched sounds under 1 kHz, slow and low voice, text that never truncates at the largest size, contrast of 4.5:1 or more, warnings with icon and words, haptics, undo, and it works with the volume at zero. Not a medical app: no diagnosis or treatment claims.
 
-**How Claude Code was used.** `CLAUDE.md` holds the goal and rules; two skills (dev log, pre-publish check); four read-only subagents that review from a different seat than the builder (elderly user, hint-leak judge, iOS reviewer, hackathon judge); four hooks (block secrets before writing, confirm before making the repo public or force-pushing, flag medical wording, run tests and check the dev log before stopping); an iOS Simulator MCP; parallel threads merged by one coordinator. On 2026-11-07 the four subagents were called by name to review the whole app; over four rounds (nine calls) 26 issues were fixed (five hint leaks that the automatic check never caught, a waiting tone that kept looping, a possible crash during a phone call), and the reviewers re-checked each round of fixes (`docs/係の点検.md`). The full, honest log, including what failed, is in `docs/開発記録.md` (Japanese).
+**How Claude Code was used.** `CLAUDE.md` holds the goal and rules; two skills (dev log, pre-publish check); four review-only subagents (they report, never edit code) that review from a different seat than the builder (elderly user, hint-leak judge, iOS reviewer, hackathon judge); four hooks (block secrets before writing, confirm before making the repo public or force-pushing, flag medical wording, run tests and check the dev log before stopping); an iOS Simulator MCP; parallel threads merged by one coordinator. On 2026-11-07 the four subagents were called by name to review the whole app; over four rounds (nine calls) 26 issues were fixed (five hint leaks that the automatic check never caught, a waiting tone that kept looping, a possible crash during a phone call), and the reviewers re-checked each round of fixes (`docs/係の点検.md`). The full, honest log, including what failed, is in `docs/開発記録.md` (Japanese).

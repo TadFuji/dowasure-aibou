@@ -13,6 +13,8 @@ xcuserdata/
 # Secrets and personal records: never commit
 .env
 *.env
+.env.*
+.vercel/
 secrets/
 private-data/
 *.local.json
