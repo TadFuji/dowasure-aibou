@@ -39,7 +39,7 @@ struct HomeView: View {
                         }
                         Text("このアプリは暮らしの助けです。医療や診断は行いません。")
                             .font(.body)
-                            .foregroundStyle(.secondary)
+                            // Not .secondary: grey body text is only 3.4:1 on white (needs 4.5:1; Xcode a11y check, 2026-11-08).
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(24)
