@@ -5,7 +5,7 @@
 > 2. **高齢の方のために、細かいところまで作り込みました。** 65歳の藤川が実機で試し、その言葉で直す、を繰り返しました。直したことは [11行の表](../README.md#高齢者に使いやすくするために直したこと)に、藤川の言葉80件以上とうまくいかなかった案40件以上は [開発記録](開発記録.md) に残しています。
 > 3. **何人もの Claude で、いろいろな方向から作り、点検しました。** 4人の係（Claude Code のサブエージェント。高齢の利用者役・ヒントの審査員・iOS の技術者・大会の審査員）に点検させて26件を直しました（[係の点検](係の点検.md)）。鍵の書き込みや医療めいた言葉は、フックが止めたり知らせたりします（[Claude活用](Claude活用.md)）。
 
-制作者の藤川はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テスト・記録を Claude Code が担当しました。ここでは、Claude Code のどの機能を、なぜ選び、どこで効いたかを残します。最終更新：2026-11-07 夜。
+制作者の藤川はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テスト・記録を Claude Code が担当しました。ここでは、Claude Code のどの機能を、なぜ選び、どこで効いたかを残します。最終更新：2026-11-08。
 
 **書いてあるのは、実物がリポジトリにあるか、開発記録に使った記録があるものだけです。** まだ使っていないものは、そう書いています。日付と時刻は [開発記録.md](開発記録.md) の見出しです。
 
@@ -42,7 +42,7 @@ flowchart LR
 |---|---|---|---|
 | **`CLAUDE.md`** | [CLAUDE.md](../CLAUDE.md) | セッションやスレッドが変わっても、同じ決まりで作るため。藤川の指示を「守ること」として固定する | 11/03 14:30 の「高齢者は高周波は聞こえないことも考慮してください。ユビキタス、全体的に。」を全体の決まりとして書いた。11/07 18:15 の「ボタンは下半分」も追記。既知の問題（シミュレーターは機種の id で指定する）は 11/07 11:50 につまずいて書き足した |
 | **スキル「開発記録」** | [`.claude/skills/dev-log/`](../.claude/skills/dev-log/SKILL.md) | 並行する複数のスレッドが、同じ形（問題 → 原因 → 対応 → 結果、藤川の言葉はそのまま）で書くため。CLAUDE.md に全部書くと長くなるので、手順だけを切り出した | 11/03 15:40 から。11/07 17:34 に全スレッド（12本）と全ブランチを点検し、抜けていた出来事を補った時も、この形で書いた |
-| **スキル「公開前の点検」** | [`.claude/skills/pre-publish-check/`](../.claude/skills/pre-publish-check/SKILL.md) | 公開は取り消せない。手順を毎回思い出すのでなく、決まった点検表で行うため | 提出前（11/08）に使う予定。11/07 夜の時点では、まだ実行していない |
+| **スキル「公開前の点検」** | [`.claude/skills/pre-publish-check/`](../.claude/skills/pre-publish-check/SKILL.md) | 公開は取り消せない。手順を毎回思い出すのでなく、決まった点検表で行うため | 11/08 17:25、公開に切り替える前に、この手順で全履歴・全ブランチを点検した（鍵らしい文字列0件）。公開後の 11/08 夕方にも、3人の係と Fable で読み直した |
 | **サブエージェント（その場で呼ぶ）** | 開発記録 | 量の多い作業や、作った本人とは別の目が要る時に、本体の文脈を汚さずに任せる | 11/02 16:30 採点データ一式（架空の記録25日・質問30問）を作らせ、本体が再実行して確かめた。11/03 07:45 公開前に全履歴の鍵と個人情報を独立に点検。11/07 10:25 3つの立場（高齢の方の使い勝手・iOS 技術者・審査員）で同時にレビューし、撮影中に失敗しそうな不具合を4つ見つけた → 11:50〜 9つに分けて直した |
 | **サブエージェント（係として固定）** | [`.claude/agents/`](../.claude/agents/)：[高齢の利用者役](../.claude/agents/elder-user-reviewer.md)、[ヒント漏れの審査員](../.claude/agents/hint-leak-judge.md)、[iOS 技術者](../.claude/agents/ios-reviewer.md)、[大会の審査員](../.claude/agents/hackathon-judge.md) | 11/07 午前のレビューがよく効いたので、同じ目をどのスレッドからでも呼べるようにした。どの係も、コードは書き換えず指摘だけを返す決まり（利用者役と審査員は読む道具だけ） | 11/07 16:18 に固定。アプリの目的の中心「答えを漏らさない」を見る係を1人足して4人にした。11/07 20:20、藤川の「実際に点検させて」で、4人を名前で同時に呼んだ。直すたびに係へ見直させ、4回・計9回の呼び出しで26件を直した（[係の点検.md](係の点検.md)）。ヒントの係は、自動の判定では一度も見つからなかった漏れ（「◯月の明日」で日にちが分かる、など）を計5問見つけた |
 | **フック：書く前の鍵止め** | [`guard_secrets.py`](../.claude/hooks/guard_secrets.py)（PreToolUse） | git の pre-commit より一歩手前、ファイルに書く前に止めるため。公開が必須の大会なので、鍵は「書かない」が一番安全 | 11/07 16:18 に、止めるべき例と通すべき例を1つずつ流して確かめた |
@@ -76,10 +76,10 @@ flowchart LR
 
 | 仕事 | だれが | 実物 |
 |---|---|---|
-| 候補日を最大7日に絞る | コード（端末内） | [`Retriever.swift`](../DowasureCore/Sources/DowasureCore/Retriever.swift#L142) |
+| 候補日を最大7日に絞る | コード（端末内） | [`Retriever.swift`](../DowasureCore/Sources/DowasureCore/Retriever.swift#L141) |
 | 答え・ヒント3つ・正解とみなす言葉・根拠の日付を作る | AI（1回だけ呼ぶ） | [`Prompts.answerSystem`](../DowasureCore/Sources/DowasureCore/Prompts.swift#L55) |
 | 根拠の日付を「AI に渡した日」だけに絞り、日付の文を組み立てる | コード | [`Answerer.verify`](../DowasureCore/Sources/DowasureCore/Services.swift#L73) |
-| 答えの漏れたヒントを捨てる | コード | [`Services.swift` 84〜93行](../DowasureCore/Sources/DowasureCore/Services.swift#L84-L93)、[`HintSession.matches`](../DowasureCore/Sources/DowasureCore/HintSession.swift#L98) |
+| 答えの漏れたヒントを捨てる | コード | [`Services.swift` 84〜93行](../DowasureCore/Sources/DowasureCore/Services.swift#L84-L93)、[`HintSession.matches`](../DowasureCore/Sources/DowasureCore/HintSession.swift#L106) |
 | ヒント → 言い当て → 答え、と進める | コード（追加の呼び出しなし） | [`HintSession.swift`](../DowasureCore/Sources/DowasureCore/HintSession.swift) |
 
 - **構造化出力**（`output_config.format` に JSON スキーマ）：決まった形で受け取り、コードで確かめる。
