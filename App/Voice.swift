@@ -37,6 +37,17 @@ final class VoiceInput {
 
     var isListening: Bool { state == .listening }
 
+    /// Shown when the microphone or speech recognition is not allowed. MicButton adds a button that opens
+    /// this app's page in the iPhone settings, so the user need not find it (final review, 2026-11-08).
+    static let permissionMessage = "マイクと音声認識が許可されていません。下の「iPhone の設定を開く」で許可するか、文字で入力してください。"
+
+    /// Every failure is felt as well as read: a warning vibration, like the one at the start of listening,
+    /// so a user who is not looking at the screen (or has the sound off) notices it (final review, 2026-11-08).
+    private func fail(_ message: String) {
+        state = .failed(message)
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+    }
+
     func start(onFinish: @escaping (String) -> Void) async {
         // Decide before the first await: two quick calls must not both start the microphone.
         guard state != .listening, !isStarting else { return }
@@ -68,11 +79,11 @@ final class VoiceInput {
         // stop() was called while waiting (e.g. the user went back to the home screen): do not start.
         guard mine == startToken else { return }
         guard allowed else {
-            state = .failed("マイクと音声認識を許可してください（設定アプリ → ど忘れ相棒）。")
+            fail(Self.permissionMessage)
             return
         }
         guard let recognizer, recognizer.isAvailable else {
-            state = .failed("いまは音声認識を使えません。文字で入力してください。")
+            fail("いまは音声認識を使えません。文字で入力してください。")
             return
         }
         do {
@@ -93,7 +104,7 @@ final class VoiceInput {
             // the app with an exception Swift cannot catch (ios-reviewer, 2026-11-07).
             guard format.sampleRate > 0, format.channelCount > 0 else {
                 cleanUp()
-                state = .failed("いまはマイクを使えません。電話などが終わってから、もう一度お試しください。")
+                fail("いまはマイクを使えません。電話などが終わってから、もう一度お試しいただくか、文字で入力してください。")
                 return
             }
             input.removeTap(onBus: 0)
@@ -119,14 +130,14 @@ final class VoiceInput {
                     print("Speech recognition error: \(errorText)")
                     self.cleanUp()
                     self.onFinish = nil
-                    self.state = .failed("うまく聞き取れませんでした。もう一度お試しいただくか、文字で入力してください。")
+                    self.fail("うまく聞き取れませんでした。もう一度お試しいただくか、文字で入力してください。")
                 } else {
                     self.stop()
                 }
             }
         } catch {
             cleanUp()
-            state = .failed("マイクを始められませんでした。")
+            fail("マイクを始められませんでした。文字で入力してください。")
         }
     }
 
@@ -185,7 +196,7 @@ final class VoiceInput {
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             cleanUp()
             onFinish = nil
-            state = .failed(VoiceTiming.silenceMessage(buttonTitle: buttonTitle))
+            fail(VoiceTiming.silenceMessage(buttonTitle: buttonTitle))
         } else {
             stop()
         }
@@ -775,6 +786,21 @@ struct MicButton: View {
     private var showsStop: Bool { voice.isListening || waitingToListen }
 
     var body: some View {
+        // Permission was refused: the way to allow it, as a button in the bottom area next to the microphone
+        // (final review, 2026-11-08: "設定アプリ → ど忘れ相棒" was hard to find, and easy to mix up with the app's own 設定).
+        if voice.state == .failed(VoiceInput.permissionMessage), let url = URL(string: UIApplication.openSettingsURLString) {
+            Button {
+                UIApplication.shared.open(url)
+            } label: {
+                Label("iPhone の設定を開く", systemImage: "gearshape")
+                    .font(.title2.bold())
+                    .wrapsForLargeText()
+                    .frame(maxWidth: .infinity, minHeight: 64)
+            }
+            .buttonStyle(.bordered)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .accessibilityIdentifier("openSystemSettings")
+        }
         Button {
             if voice.isListening {
                 voice.stop()
@@ -816,7 +842,7 @@ struct MicStatus: View {
             // iPhoneが一瞬ブルっとするのは、3秒後ぐらい).
             Label("ブルっとしたら、お話しください", systemImage: "hourglass")
                 .font(.title2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary) // not .secondary: 3.4:1 on white is below 4.5:1 (final review, 2026-11-08)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("micWaiting")
         }
@@ -835,7 +861,7 @@ struct MicStatus: View {
             } else {
                 Label(voice.text, systemImage: "mic.fill")
                     .font(.title2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary) // not .secondary: 3.4:1 on white is below 4.5:1 (final review, 2026-11-08)
                     .lineLimit(compact ? 3 : nil)
                     .truncationMode(.head)
                     .fixedSize(horizontal: false, vertical: true)
@@ -926,7 +952,7 @@ struct VolumeWarning: View {
         } else if enabled && watcher.isTooLow {
             Label("音が出ていないので、文字とブルっという振動でお知らせします。", systemImage: "speaker.slash.fill")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary) // not .secondary: 3.4:1 on white is below 4.5:1 (final review, 2026-11-08)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
