@@ -203,8 +203,13 @@ struct SettingsView: View {
                                 .accessibilityIdentifier("keyCheckMessage")
                         }
                     }
+                    #if DEBUG
+                    // Only in builds run from Xcode (Debug): demo filming, screenshots and judges trying it on a Mac.
+                    // Hidden in the App Store / TestFlight build (Release), so a family member cannot mix
+                    // made-up records into the person's real ones (final review, 2026-11-08).
                     Button("架空の記録を入れる") { loadSamples() }
                         .accessibilityIdentifier("loadSamples")
+                    #endif
                     if let message {
                         Text(message).accessibilityIdentifier("settingsMessage")
                     }
@@ -360,6 +365,7 @@ struct SettingsView: View {
         }
     }
 
+    #if DEBUG
     /// Adds the made-up records only on days that have no record yet, so real records are never replaced.
     private func loadSamples() {
         do {
@@ -381,4 +387,5 @@ struct SettingsView: View {
             message = "入れられませんでした。"
         }
     }
+    #endif
 }
