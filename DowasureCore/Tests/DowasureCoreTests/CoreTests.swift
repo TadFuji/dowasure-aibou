@@ -471,6 +471,27 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
         #expect(r.revealed && r.text == "10月8日の記録より：森田さんです。")
     }
 
+    @Test func askingForHintNeverReveals() {
+        // 2026-11-08 final review: "ヒントを教えて" and "わからない" used to give the answer away.
+        for words in ["ヒントを教えて", "うーん、わからないなあ", "答えのヒントをください", "教えて", "思い出せない", "もう少しヒント"] {
+            var s = HintSession(answer: found())
+            _ = s.start()
+            let r = s.respond(to: words)
+            #expect(!r.revealed, "\(words)")
+            #expect(!r.text.contains("森田"), "\(words)")
+            #expect(r.text.hasPrefix("もう一つヒントです。"), "\(words)")
+            #expect(s.hintsGiven == 2, "\(words)")
+        }
+    }
+
+    @Test func onlyClearWordsRevealTheAnswer() {
+        for words in ["答えを教えて", "こたえ", "降参です", "ギブアップ"] {
+            var s = HintSession(answer: found())
+            _ = s.start()
+            #expect(s.respond(to: words).revealed, "\(words)")
+        }
+    }
+
     @Test func hintThatLeaksAnswerIsDropped() {
         let a = found(hints: ["森田さんという方です。", "駅前でお会いしました。"])
         #expect(a.hints == ["駅前でお会いしました。"])
