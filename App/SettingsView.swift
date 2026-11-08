@@ -111,7 +111,7 @@ struct SettingsView: View {
                             VStack(alignment: .leading) {
                                 Text(voice.name).font(.title2)
                                 Text((voice.gender == .male ? "男性・" : voice.gender == .female ? "女性・" : "") + Self.qualityLabel(voice.quality))
-                                    .font(.body).foregroundStyle(.secondary)
+                                    .font(.body) // not .secondary: 3.4:1 on white is below 4.5:1
                             }
                             Spacer()
                             if voice.identifier == currentVoiceID {
@@ -129,7 +129,7 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 Text("押すと、その声で読み上げます。「自然な声」は話し始めるまで2〜3秒かかります。「すぐ話す声」は iPhone の声で、待たずに話します。")
-                    .font(.body).foregroundStyle(.secondary)
+                    .font(.body) // not .secondary: 3.4:1 on white is below 4.5:1
             } header: {
                 Text("声").font(.title3.bold())
             }
