@@ -13,6 +13,7 @@ struct SettingsView: View {
     /// Result of trying the saved key once (so a mistyped key is found now, not when the user asks something).
     @State private var keyCheckMessage: String?
     @State private var keyCheckOK = false
+    @State private var keyChecking = false
     @State private var message: String?
     @State private var confirmDelete = false
     /// Read when the settings open (not on every redraw), for the export button.
@@ -32,6 +33,8 @@ struct SettingsView: View {
     @AppStorage(EveningReminder.minuteKey) private var reminderMinute = 0
     @State private var reminderMessage: String?
     @State private var reminderDenied = false
+    /// Notifications were refused: shows the button to the iPhone settings until they are allowed.
+    @State private var notificationsBlocked = false
 
     private let voices = Speaker.japaneseVoices
 
@@ -55,7 +58,7 @@ struct SettingsView: View {
             Section {
                 Text("項目は画面の下の方から並んでいます。指で上へずらすと、続きが出てきます。")
                     .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary) // not .secondary: 3.4:1 on white is below 4.5:1 (final review, 2026-11-08)
                     .fixedSize(horizontal: false, vertical: true)
                     .listRowBackground(Color.clear)
                     .accessibilityIdentifier("settingsGuide")
@@ -71,18 +74,31 @@ struct SettingsView: View {
                 if let reminderMessage {
                     Text(reminderMessage).font(.title3).accessibilityIdentifier("reminderMessage")
                 }
+                // Not allowed: open this app's page in the iPhone settings directly, instead of asking the user
+                // to find it (easy to mix up with this screen, also called 設定; final review, 2026-11-08).
+                if notificationsBlocked, let url = URL(string: UIApplication.openSettingsURLString) {
+                    Button {
+                        UIApplication.shared.open(url)
+                    } label: {
+                        Label("iPhone の設定を開く", systemImage: "gearshape")
+                            .font(.title2.bold())
+                            .wrapsForLargeText()
+                    }
+                    .accessibilityIdentifier("openSystemSettings")
+                }
             } header: {
                 Text("お知らせ").font(.title3.bold())
             }
 
             Section {
                 // The natural voice needs no key of its own: it goes through the maker's relay (2026-11-07).
-                Picker("声の種類", selection: $voiceMode) {
-                    Text("自然な声").tag("cloud")
-                    Text("すぐ話す声").tag("device")
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: voiceMode) { _, _ in Speaker.shared.say("今日も一日、おつかれさまでした。") }
+                // Large rows with a check mark, not a small segmented control: its letters stayed small
+                // and the chosen side was shown only by a light colour (final review, 2026-11-08).
+                ChoiceRow(title: "自然な声", selected: voiceMode == "cloud") { voiceMode = "cloud" }
+                    .accessibilityIdentifier("voiceModeCloud")
+                ChoiceRow(title: "すぐ話す声（iPhone の声）", selected: voiceMode == "device") { voiceMode = "device" }
+                    .accessibilityIdentifier("voiceModeDevice")
+                    .onChange(of: voiceMode) { _, _ in Speaker.shared.say("今日も一日、おつかれさまでした。") }
                 if voiceMode != "device" {
                     ForEach(CloudVoice.voices, id: \.name) { item in
                         Button {
@@ -123,11 +139,11 @@ struct SettingsView: View {
                     .accessibilityAddTraits(voice.identifier == currentVoiceID ? .isSelected : [])
                 }
                 }
-                Picker("速さ", selection: $speechSpeed) {
-                    Text("ゆっくり").tag("slow")
-                    Text("ふつう").tag("normal")
-                }
-                .pickerStyle(.segmented)
+                Text("話す速さ").font(.title2.bold())
+                ChoiceRow(title: "ゆっくり", selected: speechSpeed == "slow") { speechSpeed = "slow" }
+                    .accessibilityIdentifier("speedSlow")
+                ChoiceRow(title: "ふつう", selected: speechSpeed == "normal") { speechSpeed = "normal" }
+                    .accessibilityIdentifier("speedNormal")
                 Text("押すと、その声で読み上げます。「自然な声」は話し始めるまで2〜3秒かかります。「すぐ話す声」は iPhone の声で、待たずに話します。")
                     .font(.body) // not .secondary: 3.4:1 on white is below 4.5:1
             } header: {
@@ -149,7 +165,15 @@ struct SettingsView: View {
                     Button("APIキーを保存する") {
                         keyFieldFocused = false
                         apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                        keyMessage = APIKeyStore.save(apiKey) ? "保存しました。" : "保存できませんでした。"
+                        keyCheckMessage = nil
+                        if apiKey.isEmpty {
+                            // Saving an empty field used to delete the key and still say "保存しました。"
+                            // (final review, 2026-11-08). Nothing is changed now; the saved key stays.
+                            apiKey = APIKeyStore.load()
+                            keyMessage = "キーが入力されていません。保存してあるキーは、そのままです。"
+                        } else {
+                            keyMessage = APIKeyStore.save(apiKey) ? "保存しました。" : "保存できませんでした。"
+                        }
                         if keyMessage == "保存しました。" { Task { await checkKey() } }
                         // Once the keyboard has gone down, bring the result to the middle of the list.
                         Task {
@@ -164,7 +188,12 @@ struct SettingsView: View {
                             .accessibilityIdentifier("keyMessage")
                             .id("keyResult")
                     }
-                    if let keyCheckMessage {
+                    if keyChecking {
+                        // While checking: an hourglass in the normal text colour, not the green "done" check
+                        // (it looked as if the key had already been accepted; final review, 2026-11-08).
+                        Label("キーが使えるか確かめています…", systemImage: "hourglass")
+                            .accessibilityIdentifier("keyCheckMessage")
+                    } else if let keyCheckMessage {
                         if keyCheckOK {
                             Label(keyCheckMessage, systemImage: "checkmark.circle.fill")
                                 .foregroundStyle(Palette.greenText)
@@ -174,8 +203,13 @@ struct SettingsView: View {
                                 .accessibilityIdentifier("keyCheckMessage")
                         }
                     }
+                    #if DEBUG
+                    // Only in builds run from Xcode (Debug): demo filming, screenshots and judges trying it on a Mac.
+                    // Hidden in the App Store / TestFlight build (Release), so a family member cannot mix
+                    // made-up records into the person's real ones (final review, 2026-11-08).
                     Button("架空の記録を入れる") { loadSamples() }
                         .accessibilityIdentifier("loadSamples")
+                    #endif
                     if let message {
                         Text(message).accessibilityIdentifier("settingsMessage")
                     }
@@ -248,9 +282,10 @@ struct SettingsView: View {
 
     /// Tries the key once with a tiny request and says plainly whether it works.
     private func checkKey() async {
-        keyCheckOK = true
-        keyCheckMessage = "キーが使えるか確かめています…"
+        keyChecking = true
+        keyCheckMessage = nil
         let problem = await ClaudeClient(apiKey: apiKey).checkKey()
+        keyChecking = false
         switch problem {
         case nil:
             keyCheckOK = true
@@ -285,11 +320,35 @@ struct SettingsView: View {
         }
         if await EveningReminder.schedule(hour: reminderHour, minute: reminderMinute) {
             reminderMessage = String(format: "毎晩 %d時%02d分 にお知らせします。", reminderHour, reminderMinute)
+            notificationsBlocked = false
         } else {
             // Turning the switch back off triggers this function again; keep this message.
             reminderDenied = true
+            notificationsBlocked = true
             reminderEnabled = false
-            reminderMessage = "通知が許可されていません。設定アプリ →「ど忘れ相棒」→ 通知 で許可してください。"
+            reminderMessage = "通知が許可されていません。下の「iPhone の設定を開く」から「通知」を許可してください。"
+        }
+    }
+
+    /// One choice in a short list: a full-width row in large type, with a check mark (not colour alone) on the chosen one.
+    private struct ChoiceRow: View {
+        let title: String
+        let selected: Bool
+        let action: () -> Void
+        var body: some View {
+            Button(action: action) {
+                HStack {
+                    Text(title).font(.title2).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.title)
+                        .foregroundStyle(selected ? Palette.greenText : Color.primary)
+                }
+                .frame(minHeight: 56)
+                .contentShape(Rectangle())
+            }
+            .foregroundStyle(.primary)
+            .accessibilityAddTraits(selected ? .isSelected : [])
         }
     }
 
@@ -306,6 +365,7 @@ struct SettingsView: View {
         }
     }
 
+    #if DEBUG
     /// Adds the made-up records only on days that have no record yet, so real records are never replaced.
     private func loadSamples() {
         do {
@@ -327,4 +387,5 @@ struct SettingsView: View {
             message = "入れられませんでした。"
         }
     }
+    #endif
 }

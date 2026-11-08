@@ -57,7 +57,7 @@ struct AskView: View {
                 if let askedQuestion {
                     Text("「\(askedQuestion)」について")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary) // not .secondary: 3.4:1 on white is below 4.5:1 (final review, 2026-11-08)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("askedQuestion")
                 }
@@ -76,7 +76,7 @@ struct AskView: View {
                     if pendingQuestion != nil {
                         Text("短くお答えいただくと、前の質問とあわせて探します。")
                             .font(.title3)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.primary) // not .secondary: 3.4:1 on white is below 4.5:1 (final review, 2026-11-08)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
