@@ -22,6 +22,8 @@ struct TalkView: View {
     @State private var waitingToListen = false
     /// Transcript before the last item, so a mistaken item can be taken back.
     @State private var undoTranscript: String?
+    /// Transcript just before "いまのを取り消す", so a mistaken undo can be put back (final review, 2026-11-08).
+    @State private var redoTranscript: String?
 
     /// UI tests run without speech output or microphone.
     private let voiceEnabled = !ProcessInfo.processInfo.arguments.contains("-uitest-no-voice")
@@ -43,7 +45,7 @@ struct TalkView: View {
                 if let note {
                     Label(note, systemImage: "checkmark.circle")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary) // not .secondary: 3.4:1 on white is below 4.5:1 (final review, 2026-11-08)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("saveNote")
                 }
@@ -67,7 +69,7 @@ struct TalkView: View {
         }
         .elderScreen("覚えておくこと") {
             // "もう一度きく" and "いまのを取り消す" side by side, so the bottom area stays short.
-            if (lastConfirmation != nil && voiceEnabled) || undoTranscript != nil {
+            if (lastConfirmation != nil && voiceEnabled) || undoTranscript != nil || redoTranscript != nil {
                 HStack(spacing: 12) {
                     if let lastConfirmation, voiceEnabled {
                         // Stops listening first: speaking takes the audio away from the microphone, which
@@ -90,6 +92,20 @@ struct TalkView: View {
                         .buttonStyle(.bordered)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                         .accessibilityIdentifier("undoButton")
+                    }
+                    if redoTranscript != nil {
+                        // The undo itself can be undone: pressed by mistake, the words are not lost.
+                        Button {
+                            Task { await redoLast() }
+                        } label: {
+                            Label("取り消しをやめる", systemImage: "arrow.uturn.forward")
+                                .font(.title2.bold())
+                                .wrapsForLargeText()
+                                .frame(maxWidth: .infinity, minHeight: 64)
+                        }
+                        .buttonStyle(.bordered)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .accessibilityIdentifier("redoButton")
                     }
                 }
             }
@@ -170,11 +186,34 @@ struct TalkView: View {
         guard let previous = undoTranscript else { return }
         undoTranscript = nil
         let today = DayCalendar().key(for: Date())
-        let extraction = RecordStore.day(today, in: context)?.record?.extraction ?? .empty
+        let current = RecordStore.day(today, in: context)?.record
+        let extraction = current?.extraction ?? .empty
         try? RecordStore.save(DayRecord(date: today, transcript: previous, extraction: extraction), in: context)
+        redoTranscript = current?.transcript
         savedToday = previous.split(separator: "\n").map(String.init)
         lastConfirmation = "取り消しました。"
         if voiceEnabled { Speaker.shared.say("取り消しました。") }
+        await refreshSummary(previous, on: today)
+    }
+
+    /// Puts back what "いまのを取り消す" took away.
+    private func redoLast() async {
+        guard let restored = redoTranscript else { return }
+        redoTranscript = nil
+        let today = DayCalendar().key(for: Date())
+        let current = RecordStore.day(today, in: context)?.record
+        try? RecordStore.save(DayRecord(date: today, transcript: restored,
+                                        extraction: current?.extraction ?? .empty), in: context)
+        undoTranscript = current?.transcript ?? ""
+        savedToday = restored.split(separator: "\n").map(String.init)
+        lastConfirmation = "元に戻しました。"
+        if voiceEnabled { Speaker.shared.say("元に戻しました。") }
+        await refreshSummary(restored, on: today)
+    }
+
+    /// Makes the summary again for this transcript, unless something new was added meanwhile.
+    private func refreshSummary(_ transcript: String, on today: String) async {
+        let previous = transcript
         guard !previous.isEmpty else { return }
         if let refreshed = try? await Recorder(client: ClaudeClient(apiKey: APIKeyStore.load())).extract(transcript: previous),
            RecordStore.day(today, in: context)?.record?.transcript == previous {
@@ -225,6 +264,7 @@ struct TalkView: View {
         }
         savedToday = transcript.split(separator: "\n").map(String.init)
         undoTranscript = existing?.transcript ?? ""
+        redoTranscript = nil
         let confirmation = MemoLog.confirmation(for: words)
         lastConfirmation = confirmation
         if speaks {
