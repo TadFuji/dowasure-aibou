@@ -16,6 +16,19 @@ targets:
     sources: [App]
     dependencies:
       - package: DowasureCore
+    # Siri may write the spoken name as 度忘れ相棒 or in kana; these let it still find the app.
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        INAlternativeAppNames:
+          - INAlternativeAppName: 度忘れ相棒
+            INAlternativeAppNamePronunciationHint: どわすれあいぼう
+          - INAlternativeAppName: どわすれ相棒
+            INAlternativeAppNamePronunciationHint: どわすれあいぼう
+          - INAlternativeAppName: どわすれあいぼう
+            INAlternativeAppNamePronunciationHint: どわすれあいぼう
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.tadfuji.dowasure

@@ -29,7 +29,8 @@ struct DowasureApp: App {
             try? container.mainContext.delete(model: StoredDay.self)
             try? container.mainContext.save()
         }
-        if args.contains("-uitest-reset") || args.contains("-uitest-reset-records") {
+        if args.contains("-uitest-reset") || args.contains("-uitest-reset-records") || args.contains("-reset-recall-count") {
+            // -reset-recall-count: clears only the "思い出せました" count, keeping the records (used before filming).
             RecallStore.reset()
         }
         if args.contains("-uitest-reset") {
