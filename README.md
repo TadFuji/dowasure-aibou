@@ -67,7 +67,7 @@
 | 答えが出るまでの待ち時間 | 平均 4.4秒、最長 8.6秒 | 同上 |
 | 中核の単体テスト | **60件**（Mac で全件成功） | `DowasureCore/Tests`、2026-11-07 夜（5c5110c） |
 | 画面の通しテスト | **6本**（本物の Claude を使う2本を含む。全件成功） | `UITests/`、2026-11-07 夜（5c5110c）。ほかに README の画面写真を撮るだけのテストが1本（ふだんは飛ばす） |
-| 声の中継所のテスト | 6件（成功） | `relay/speak.test.js` |
+| 声の中継所のテスト | 8件（成功、11/08） | `relay/speak.test.js` |
 
 採点の問題は架空の30問で、制作側が作ったものです。良く出すぎている恐れもあります（[限界](docs/採点.md#限界正直に)）。
 
@@ -343,7 +343,7 @@ open DowasureAibou.xcodeproj
 | 採点（検索だけ） | `cd DowasureCore && swift run DowasureEval` | 通信なし。正しい日が候補に入った 22/22、1位で当たった 21/22 |
 | 採点（本物の AI） | `cd DowasureCore && swift run DowasureEval --live` | 鍵を `secrets/anthropic_api_key` に置いた時だけ。`--effort` で考える量を切り替え |
 | 画面の通しテスト（6本） | `xcodebuild test -project DowasureAibou.xcodeproj -scheme DowasureAibou -destination 'platform=iOS Simulator,id=<機種のid>'` | 記録と取り消し、鍵の保存、お知らせ、ヒントから答え、本物の Claude での答え |
-| 中継所のテスト（6件） | `cd relay && node --test` | 決まった頼みだけ通す、鍵が無い時は Google を呼ばない、回数の上限 |
+| 中継所のテスト（8件） | `cd relay && node --test` | 決まった頼みだけ通す、鍵が無い時は Google を呼ばない、回数の上限 |
 
 採点の作り方と限界は [docs/採点.md](docs/採点.md)。
 
