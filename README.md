@@ -20,11 +20,11 @@
 **誰のためか**：スマホに慣れていない高齢の方。「さっき聞いた名前」「来週の約束」が、ふっと出てこない時のために。
 **どう作ったか**：Built with Claude: Japan 2026 の応募作品です。2026-11-02 から期間中に新しく作りました（11/02 の最初の版は、11/03 の最初のコミットにまとめて入っています）。制作者の藤川（65歳）はプログラマーではなく、コードを1行も書いていません。企画・実機での試用・判断を藤川が、設計・実装・テストを Claude Code が担当しました。
 
-<!--
-【11/08 差し込み枠：デモ動画】YouTube の限定公開 URL ができたら、この注釈を消して次の2行を生かす。
-## デモ動画（3分）
-[![ど忘れ相棒 デモ動画](https://img.youtube.com/vi/動画ID/hqdefault.jpg)](https://www.youtube.com/watch?v=動画ID)
--->
+## デモ動画（3分以内）
+
+[![ど忘れ相棒 デモ動画](https://img.youtube.com/vi/m0t_-hheois/hqdefault.jpg)](https://youtu.be/m0t_-hheois)
+
+藤川が自分の iPhone で、実際に使っている様子です。記録は架空のものです。
 
 <!--
 【11/08 差し込み枠：画面写真】UITests/ScreenshotTests.swift で撮った screenshots-out/ から選び、docs/images/ に入れてから、この注釈を消して次の表を生かす。写真は架空の記録だけ。
