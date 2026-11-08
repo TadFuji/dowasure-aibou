@@ -306,7 +306,9 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
     /// Speaks and returns when speaking has finished (or was stopped).
     func sayAndWait(_ text: String) async {
-        stop()
+        // Not stop(): a waiting tone started by the caller (the AI is thinking) keeps sounding
+        // until this voice is ready, without a break.
+        stopSpeech()
         let mine = generation
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -342,6 +344,10 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
                 // Could not play (e.g. audio is busy): fall through to the other ways, never wait forever.
                 self.player = nil
             }
+            // The voice is now made on the server, which takes a few seconds: the waiting tone tells the user
+            // to wait, wherever this is said from (a hint, "もう一度きく", a reply to a guess...).
+            // (2026-11-08, 藤川さん: the thinking sound in every situation where the voice is being made.)
+            startWaitingTone()
             if cacheFile == nil {
                 // Main model first; if it has hit its daily limit, the other model (separate limit).
                 for model in Self.modelsToTry() {
@@ -432,6 +438,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         Self.loop(pattern, on: toneNode)
         toneNode.play()
         toneOn = true
+        Self.trace("tone: start")
     }
 
     /// "そうです！" moment: a soft rising two-note chime (G4 → C5, below 1 kHz) and a success vibration,
@@ -482,6 +489,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         guard toneOn else { return }
         toneNode.stop()
         toneOn = false
+        Self.trace("tone: stop")
     }
 
     private func prepareEngine() {
@@ -669,7 +677,13 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
         stopWaitingTone()
     }
 
+    /// Stops speech and the waiting tone: nobody waits for this voice any more ("話し終わった", volume 0, ...).
     func stop() {
+        stopSpeech()
+        stopWaitingTone()
+    }
+
+    private func stopSpeech() {
         generation += 1
         synthesizer.stopSpeaking(at: .immediate)
         if engineReady { streamNode.stop() }

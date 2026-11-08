@@ -53,8 +53,7 @@ struct DowasureApp: App {
         if args.contains("-voice-selftest") {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(2))
-                Speaker.shared.startWaitingTone()
-                try? await Task.sleep(for: .seconds(1))
+                // No startWaitingTone() here: sayAndWait starts it by itself while the voice is being made.
                 await Speaker.shared.sayAndWait("午後は、どこかへお出かけになりましたか？")
                 Speaker.trace("selftest: done")
             }
