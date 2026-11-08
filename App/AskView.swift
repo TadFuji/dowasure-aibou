@@ -41,6 +41,17 @@ struct AskView: View {
     var body: some View {
         // Top half: only things to read (the question, the hint, what the microphone hears).
         // Bottom half: every button, within reach of the right thumb (藤川さん, 2026-11-07).
+        VStack(spacing: 0) {
+        // The moment to speak is pinned just under the title, outside the scrolling text: with a long hint
+        // it sat below the hint and went under the tall bottom area (藤川さん's iPhone, 2026-11-08).
+        if showsMicStatus {
+            VStack(alignment: .leading, spacing: 12) {
+                MicStatus(voice: voice, waiting: waitingToListen, compact: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+        }
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if let askedQuestion {
@@ -69,14 +80,15 @@ struct AskView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                MicStatus(voice: voice, waiting: waitingToListen)
                 if let errorMessage {
                     WarningText(text: errorMessage)
                 }
             }
             .padding(24)
         }
-        .elderScreen("あれ、何だっけ？") {
+        }
+        .elderScreen("あれ、何だっけ？",
+                     readingMinHeight: showsMicStatus ? Style.listeningReadingMinHeight : Style.readingMinHeight) {
             if inHints {
                 hintControls
             } else {
@@ -108,6 +120,13 @@ struct AskView: View {
             voice.cancel()
             Speaker.shared.stopEverything()
         }
+    }
+
+    /// Waiting to listen, listening, or the microphone failed: the pinned area under the title is shown.
+    private var showsMicStatus: Bool {
+        if waitingToListen || voice.isListening { return true }
+        if case .failed = voice.state { return true }
+        return false
     }
 
     /// Hints are being given (not yet answered).

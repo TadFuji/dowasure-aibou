@@ -122,6 +122,8 @@ enum Style {
     static let dockButtonHeight: CGFloat = 72
     /// The reading area at the top never shrinks below this, even with the largest text size.
     static let readingMinHeight: CGFloat = 140
+    /// The ask screen while listening: the "どうぞ、お話しください" sign and some of the hint must both fit.
+    static let listeningReadingMinHeight: CGFloat = 220
 }
 
 struct BigButton: View {
@@ -177,6 +179,7 @@ struct ElderScreen<Actions: View>: ViewModifier {
     /// the bottom area is hidden, so it does not ride up over the keyboard and cover the field and its button.
     /// (On the talk and ask screens the text field is in the bottom area, so it must stay.)
     var hidesDockWithKeyboard = false
+    var readingMinHeight = Style.readingMinHeight
     @Environment(\.dismiss) private var dismiss
     @State private var keyboardShown = false
 
@@ -184,6 +187,8 @@ struct ElderScreen<Actions: View>: ViewModifier {
         VStack(spacing: 0) {
             Text(title)
                 .font(.largeTitle.bold())
+                // Never cut to "…" with the largest text: the bottom area scrolls instead.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
                 .padding(.top, 8)
@@ -192,7 +197,7 @@ struct ElderScreen<Actions: View>: ViewModifier {
                 .padding(.top, 8)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .frame(minHeight: Style.readingMinHeight)
+                .frame(minHeight: readingMinHeight)
             if !(hidesDockWithKeyboard && keyboardShown) {
             ThumbDock {
                 actions
@@ -228,8 +233,9 @@ extension View {
     }
 
     /// `actions` are the screen's buttons; they are placed in the bottom half, above "ホームにもどる".
-    func elderScreen<Actions: View>(_ title: String, @ViewBuilder actions: () -> Actions) -> some View {
-        modifier(ElderScreen(title: title, actions: actions()))
+    func elderScreen<Actions: View>(_ title: String, readingMinHeight: CGFloat = Style.readingMinHeight,
+                                    @ViewBuilder actions: () -> Actions) -> some View {
+        modifier(ElderScreen(title: title, actions: actions(), readingMinHeight: readingMinHeight))
     }
 
     /// With the largest text sizes, labels wrap onto more lines instead of being cut off with "…".
