@@ -59,3 +59,22 @@ test("limits one caller to 20 an hour and everyone to 60 an hour", () => {
   assert.equal(tooMany("c", t), true);
   assert.equal(tooMany("c", t + 3_600_000), false);
 });
+
+test("does not pass Google's error details on to the caller", async () => {
+  process.env.GEMINI_API_KEY = "test-key";
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: "Quota exceeded for project 123456789" } }), { status: 429 });
+  const res = await POST(new Request("https://x/api/speak", { method: "POST", headers: { "x-forwarded-for": "9.9.9.9" }, body: JSON.stringify(good()) }));
+  assert.equal(res.status, 429);
+  const text = await res.text();
+  assert.doesNotMatch(text, /123456789|Quota/);
+});
+
+test("clearing old counts never lets one hour go past 60", () => {
+  const t0 = Date.UTC(2031, 0, 1, 0);
+  let ip = 0;
+  for (let h = 0; h < 120; h++) {
+    let accepted = 0;
+    for (let i = 0; i < 70; i++) if (!tooMany(`x${ip++}`, t0 + h * 3_600_000)) accepted++;
+    assert.ok(accepted <= 60, `hour ${h}: ${accepted}`);
+  }
+});

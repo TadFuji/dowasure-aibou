@@ -34,8 +34,9 @@
 ## 起動とテスト
 
 ```bash
-cd "/Volumes/ROCKET_XTRM/coding/Built with Claude/DowasureCore" && swift test
-cd "/Volumes/ROCKET_XTRM/coding/Built with Claude" && xcodegen generate && xcodebuild test -project DowasureAibou.xcodeproj -scheme DowasureAibou -destination 'platform=iOS Simulator,name=Dowasure-iPhone' -derivedDataPath build/dd
+# リポジトリの最上位から（Mac では、共有フォルダではなく作業ごとの clone か worktree で）
+(cd DowasureCore && swift test)
+xcodegen generate && xcodebuild test -project DowasureAibou.xcodeproj -scheme DowasureAibou -destination 'platform=iOS Simulator,id=<Dowasure-iPhone の id>' -derivedDataPath build/dd
 ```
 
 - 実 API を使う画面テスト（testAskWithKeyAnswersWithDate）は `secrets/anthropic_api_key` があるときだけ動く。キーは起動時の環境変数でアプリ（DEBUG ビルドのみ）に渡り、キーチェーンに保存される。

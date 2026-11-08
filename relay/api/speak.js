@@ -23,7 +23,12 @@ function bump(key) {
 
 export function tooMany(ip, now = Date.now()) {
   const hour = Math.floor(now / 3_600_000);
-  if (counts.size > 5000) counts.clear();
+  if (counts.size > 5000) {
+    // 相手ごとの数だけ捨てる。全体の数まで消すと、宛先を変えながら呼ぶ相手に全体の上限を外されるため。
+    const all = counts.get(`*|${hour}`);
+    counts.clear();
+    if (all !== undefined) counts.set(`*|${hour}`, all);
+  }
   if ((counts.get(`*|${hour}`) ?? 0) >= ALL_PER_HOUR) return true;
   if (bump(`${ip}|${hour}`) > PER_IP_PER_HOUR) return true;
   bump(`*|${hour}`);
@@ -80,6 +85,11 @@ export async function POST(request) {
     body: JSON.stringify(clean),
   });
   // 上限（429）などの状態はそのままアプリへ返す。アプリは予備のモデルか iPhone の声に切り替える。
+  // 失敗の時の Google の返事（プロジェクト番号や枠の詳しい中身が入る）は外へ出さず、決まった短い文にする。
+  if (!upstream.ok) {
+    await upstream.body?.cancel();
+    return reply(upstream.status, "upstream error");
+  }
   return new Response(upstream.body, {
     status: upstream.status,
     headers: {
