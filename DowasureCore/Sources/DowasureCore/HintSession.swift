@@ -82,15 +82,23 @@ public struct HintSession: Sendable, Equatable {
 
     // MARK: Understanding the user's words (on-device, simple and predictable)
 
+    /// Only a clear request for the answer reveals it: "答え", "降参", "ギブアップ".
+    /// "ヒントを教えて" or "答えのヒント" asks for a hint, and "わからない" or "教えて" alone gets the next hint too,
+    /// because the app's aim is to help the user recall it themselves (2026-11-08 final review).
     static func asksForAnswer(_ text: String) -> Bool {
         let t = normalize(text)
-        return ["答え", "こたえ", "教えて", "おしえて", "わからない", "分からない", "わかりません", "分かりません", "降参", "こうさん", "ギブアップ"]
+        if t.contains(normalize("ヒント")) { return false }
+        return ["答え", "こたえ", "降参", "こうさん", "ギブアップ"]
             .contains { t.contains(normalize($0)) }
     }
 
+    /// Asking for more help without asking for the answer: no "と聞こえました" before the next hint.
     static func asksForHint(_ text: String) -> Bool {
         let t = normalize(text)
-        return ["ヒント", "もうすこし", "もう少し", "もっと"].contains { t.contains(normalize($0)) }
+        return ["ヒント", "もうすこし", "もう少し", "もっと", "教えて", "おしえて",
+                "わからない", "分からない", "わかりません", "分かりません", "わかんない",
+                "思い出せない", "おもいだせない", "思い出せません", "おもいだせません"]
+            .contains { t.contains(normalize($0)) }
     }
 
     /// True when the text contains one of the answer keywords (ignoring spaces, "さん", kana type, width).
