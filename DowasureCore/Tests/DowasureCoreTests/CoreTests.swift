@@ -352,6 +352,12 @@ final class SequenceTransport: HTTPTransport, @unchecked Sendable {
 }
 
 @Suite struct VoiceTimingTests {
+    @Test func silenceMessageNamesTheButtonOnScreen() {
+        #expect(VoiceTiming.silenceMessage(buttonTitle: "思い出したことを言う")
+                .hasSuffix("「思い出したことを言う」を押してお話しください。"))
+        #expect(!VoiceTiming.silenceMessage(buttonTitle: "声でたずねる").contains("声で話す"))
+    }
+
     @Test func waitsLongerBeforeFirstWords() {
         #expect(VoiceTiming.silenceTimeout(heardSomething: false) >= 15)
         #expect(VoiceTiming.silenceTimeout(heardSomething: true) < VoiceTiming.silenceTimeout(heardSomething: false))

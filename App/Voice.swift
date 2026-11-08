@@ -167,6 +167,10 @@ final class VoiceInput {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
+    /// The microphone button's title on the current screen, set by `MicButton`. Listening may start
+    /// on its own after the opening words, so the screen tells it ahead of time.
+    @ObservationIgnored var buttonTitle = "声で話す"
+
     private func resetSilenceTimer() {
         silenceTimer?.invalidate()
         let timeout = VoiceTiming.silenceTimeout(heardSomething: !text.isEmpty)
@@ -181,7 +185,7 @@ final class VoiceInput {
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             cleanUp()
             onFinish = nil
-            state = .failed("お話が聞こえなかったので、いったん止めました。もう一度「声で話す」を押してください。")
+            state = .failed(VoiceTiming.silenceMessage(buttonTitle: buttonTitle))
         } else {
             stop()
         }
@@ -629,9 +633,11 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
     nonisolated private static func style(for speed: String) -> String {
         // Older listeners hear lower, slower, clearly articulated speech best.
+        // "slightly brighter": 藤川さん found the voice a little dark (2026-11-08) and picked this from samples.
+        // Changing this text changes the bundled file names (fileStem), so re-record App/Resources/Voice too.
         speed == "slow"
-            ? "calm, kind and warm, a slightly low and soft pitch, speaking slowly and clearly with distinct consonants"
-            : "calm, kind and warm, a slightly low and soft pitch, speaking clearly"
+            ? "calm, kind and warm, with a gentle, slightly brighter and more cheerful tone, a slightly low and soft pitch, speaking slowly and clearly with distinct consonants"
+            : "calm, kind and warm, with a gentle, slightly brighter and more cheerful tone, a slightly low and soft pitch, speaking clearly"
     }
 
     /// Only fixed phrases are cached; answers that contain the user's records are not written to disk.
@@ -789,6 +795,8 @@ struct MicButton: View {
         .tint(showsStop ? Palette.red : Palette.green)
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityIdentifier("micButton")
+        .onAppear { voice.buttonTitle = idleTitle }
+        .onChange(of: idleTitle) { _, title in voice.buttonTitle = title }
     }
 }
 
