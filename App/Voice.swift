@@ -40,6 +40,15 @@ final class VoiceInput {
     func start(onFinish: @escaping (String) -> Void) async {
         // Decide before the first await: two quick calls must not both start the microphone.
         guard state != .listening, !isStarting else { return }
+        #if DEBUG
+        // UI tests: the simulator cannot recognize speech, so only the listening state is shown.
+        if ProcessInfo.processInfo.arguments.contains("-uitest-fake-listening") {
+            self.onFinish = onFinish
+            text = ""
+            state = .listening
+            return
+        }
+        #endif
         isStarting = true
         // The microphone is (about to be) used: the waiting tone must not keep sounding, even when the start
         // fails below (no permission). Before this, a reply cut short by "ほかにも話す" left the tone
@@ -775,6 +784,9 @@ struct MicStatus: View {
     let voice: VoiceInput
     /// The opening words are still being said; the microphone starts right after them.
     var waiting = false
+    /// Pinned outside the scrolling text (ask screen): a slimmer sign, and a long transcript shows only
+    /// its latest lines, so the hint below keeps some room even with the largest text size.
+    var compact = false
 
     var body: some View {
         if waiting && !voice.isListening {
@@ -790,11 +802,11 @@ struct MicStatus: View {
             if voice.text.isEmpty {
                 // The moment to speak, told by sight as well as the vibration: works with the volume at 0.
                 Label("どうぞ、お話しください", systemImage: "mic.fill")
-                    .font(.title.bold())
+                    .font(compact ? .title2.bold() : .title.bold())
                     .foregroundStyle(Palette.greenText)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+                    .padding(compact ? 10 : 16)
                     .background(Palette.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.green, lineWidth: 3))
                     .accessibilityIdentifier("micStatus")
@@ -802,6 +814,8 @@ struct MicStatus: View {
                 Label(voice.text, systemImage: "mic.fill")
                     .font(.title2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(compact ? 3 : nil)
+                    .truncationMode(.head)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("micStatus")
             }

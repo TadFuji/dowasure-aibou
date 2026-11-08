@@ -189,4 +189,51 @@ final class FlowUITests: XCTestCase {
         let recall = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "ご自分で1回思い出せました")).firstMatch
         XCTAssertTrue(recall.waitForExistence(timeout: 5))
     }
+
+    /// The "どうぞ、お話しください" sign stays above the bottom buttons however long the hint is,
+    /// even with the largest text size (it went under them on 藤川さん's iPhone, 2026-11-08).
+    /// Uses the real API for a hint; the microphone is replaced by "-uitest-fake-listening".
+    func testListeningSignVisibleOnHintScreen() throws {
+        let keyFile = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("secrets/anthropic_api_key")
+        let key = (try? String(contentsOf: keyFile, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        try XCTSkipIf(key.isEmpty, "no local API key; live test skipped")
+        // The usual text size, and a large accessibility size.
+        for size in ["UICTContentSizeCategoryL", "UICTContentSizeCategoryAccessibilityL"] {
+            try checkListeningSign(key: key, textSize: size)
+        }
+    }
+
+    private func checkListeningSign(key: String, textSize: String) throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest-reset-records", "-uitest-no-voice", "-uitest-load-samples",
+                               "-uitest-fake-listening",
+                               "-UIPreferredContentSizeCategoryName", textSize]
+        app.launchEnvironment["DOWASURE_UITEST_API_KEY"] = key
+        app.launch()
+
+        app.buttons["askButton"].tap()
+        let input = app.textFields["askInput"]
+        input.tap()
+        input.typeText("駅前で会った眼鏡の人の名前")
+        app.buttons["askSubmit"].tap()
+        XCTAssertTrue(app.staticTexts["answerText"].waitForExistence(timeout: 60))
+        // Close the keyboard if it is still up, then start "listening".
+        if app.keyboards.count > 0 { app.swipeDown() }
+        let mic = app.buttons["micButton"]
+        XCTAssertTrue(mic.waitForExistence(timeout: 5))
+        mic.tap()
+        let sign = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "どうぞ、お話しください")).firstMatch
+        let signShown = sign.waitForExistence(timeout: 5)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "listening-sign-on-hint-screen-\(textSize)"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertTrue(signShown, textSize)
+        // Wholly above the bottom area (whose top is the microphone button).
+        XCTAssertTrue(sign.isHittable)
+        XCTAssertLessThan(sign.frame.maxY, mic.frame.minY, "sign \(sign.frame) vs mic \(mic.frame)")
+    }
 }
