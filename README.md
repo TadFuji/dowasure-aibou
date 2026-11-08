@@ -65,8 +65,8 @@
 | ヒントに答えの言葉が入った（コードの点検） | **0 / 22** | 同上 |
 | ヒントの係が読んで「漏れに近い」と判定 | 3 / 22 | 短い答え（野球・白・3勝）の最初の音。藤川が「今のまま最初の音を言う」と決めた（11/07 23:13）（[係の点検](docs/係の点検.md)） |
 | 答えが出るまでの待ち時間 | 平均 4.4秒、最長 8.6秒 | 同上 |
-| 中核の単体テスト | **60件**（Mac で全件成功） | `DowasureCore/Tests`、2026-11-07 夜（5c5110c） |
-| 画面の通しテスト | **6本**（本物の Claude を使う2本を含む。全件成功） | `UITests/`、2026-11-07 夜（5c5110c）。ほかに README の画面写真を撮るだけのテストが1本（ふだんは飛ばす） |
+| 中核の単体テスト | **65件**（Mac で全件成功） | `DowasureCore/Tests`、2026-11-08（805a502） |
+| 画面の通しテスト | **7本**（本物の Claude を使う3本を含む） | `UITests/`。2026-11-08（805a502）は鍵なしで流し、4本成功・失敗0（本物の Claude を使う3本は鍵が無いので飛んだ）。7本すべての成功は 11/07 夜（5c5110c、当時は6本）。ほかに README の画面写真を撮るだけのテストが1本（ふだんは飛ばす） |
 | 声の中継所のテスト | 8件（成功、11/08） | `relay/speak.test.js` |
 
 採点の問題は架空の30問で、制作側が作ったものです。良く出すぎている恐れもあります（[限界](docs/採点.md#限界正直に)）。
@@ -339,10 +339,10 @@ open DowasureAibou.xcodeproj
 
 | 種類 | 実行 | 内容 |
 |---|---|---|
-| 単体テスト（60件） | `cd DowasureCore && swift test` | 検索、答えの点検、ヒントの進め方、時期の言葉、書き出し、待ち時間など（AI は模擬の応答） |
+| 単体テスト（65件） | `cd DowasureCore && swift test` | 検索、答えの点検、ヒントの進め方、時期の言葉、書き出し、待ち時間など（AI は模擬の応答） |
 | 採点（検索だけ） | `cd DowasureCore && swift run DowasureEval` | 通信なし。正しい日が候補に入った 22/22、1位で当たった 21/22 |
 | 採点（本物の AI） | `cd DowasureCore && swift run DowasureEval --live` | 鍵を `secrets/anthropic_api_key` に置いた時だけ。`--effort` で考える量を切り替え |
-| 画面の通しテスト（6本） | `xcodebuild test -project DowasureAibou.xcodeproj -scheme DowasureAibou -destination 'platform=iOS Simulator,id=<機種のid>'` | 記録と取り消し、鍵の保存、お知らせ、ヒントから答え、本物の Claude での答え |
+| 画面の通しテスト（7本） | `xcodebuild test -project DowasureAibou.xcodeproj -scheme DowasureAibou -destination 'platform=iOS Simulator,id=<機種のid>'` | 記録と取り消し、鍵の保存、お知らせ、ヒントから答え、本物の Claude での答え |
 | 中継所のテスト（8件） | `cd relay && node --test` | 決まった頼みだけ通す、鍵が無い時は Google を呼ばない、回数の上限 |
 
 採点の作り方と限界は [docs/採点.md](docs/採点.md)。
@@ -398,7 +398,7 @@ open DowasureAibou.xcodeproj
 
 **How the hints stay honest.** One call to Claude Haiku 5.5 per question, with structured outputs (JSON schema) and prompt caching. Code does the rest: on-device retrieval picks at most 7 days to send; `Answerer.verify` keeps only evidence dates that were actually sent (otherwise "not found") and drops any hint that contains the answer; the "from the record of Nov 4" wording is built in code; guesses are matched on the device. A workflow, not an autonomous agent.
 
-**Results.** Live eval on 30 fictional questions: 22/22 correct, 8/8 "not found" for questions with no record, 0/22 hints leaking the answer by the code check (a separate Claude reviewer still judged 3/22 hints for very short answers as near-leaks; the hint rules were revised again and again). 60 core unit tests and 6 UI tests, all passing on a Mac on 2026-11-07. The eval set is small and was written by the maker's side, so it may be optimistic.
+**Results.** Live eval on 30 fictional questions: 22/22 correct, 8/8 "not found" for questions with no record, 0/22 hints leaking the answer by the code check (a separate Claude reviewer still judged 3/22 hints for very short answers as near-leaks; the hint rules were revised again and again). 65 core unit tests, all passing on a Mac on 2026-11-08; 7 UI tests (the 4 that need no API key passed on 2026-11-08, all passed with the live API on 2026-11-07 when there were 6). The eval set is small and was written by the maker's side, so it may be optimistic.
 
 **Built for one to two years of use.** Records live only on the iPhone in SwiftData (one row per day, stored as JSON); no server, no iCloud sync. Spoken words are saved first, so a failed summary never loses them. The family can export all records as a text file. If the store cannot be opened, the app still starts, says so, and never deletes the file. Search understands "last year", "three months ago" and seasons.
 
