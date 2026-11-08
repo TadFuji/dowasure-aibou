@@ -57,6 +57,10 @@ final class FlowUITests: XCTestCase {
         app.buttons["undoButton"].tap()
         XCTAssertTrue(app.staticTexts["取り消しました。"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "分、にんじんを買う")).firstMatch.exists)
+        // The undo can itself be taken back (final review, 2026-11-08).
+        app.buttons["redoButton"].tap()
+        XCTAssertTrue(app.staticTexts["元に戻しました。"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "分、にんじんを買う")).firstMatch.exists)
     }
 
     /// Saving the key shows a confirmation right under the button.
