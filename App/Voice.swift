@@ -633,9 +633,11 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegat
 
     nonisolated private static func style(for speed: String) -> String {
         // Older listeners hear lower, slower, clearly articulated speech best.
+        // A gentle, slightly brighter tone: 藤川さん found the voice a little dark (2026-11-08) and picked it from samples.
+        // Changing this text changes the bundled file names (fileStem), so re-record App/Resources/Voice too.
         speed == "slow"
-            ? "calm, kind and warm, a slightly low and soft pitch, speaking slowly and clearly with distinct consonants"
-            : "calm, kind and warm, a slightly low and soft pitch, speaking clearly"
+            ? "calm, kind and warm, with a gentle, slightly brighter and more cheerful tone, a slightly low and soft pitch, speaking slowly and clearly with distinct consonants"
+            : "calm, kind and warm, with a gentle, slightly brighter and more cheerful tone, a slightly low and soft pitch, speaking clearly"
     }
 
     /// Only fixed phrases are cached; answers that contain the user's records are not written to disk.
